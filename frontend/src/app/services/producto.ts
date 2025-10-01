@@ -6,6 +6,7 @@ export interface Producto {
   id: number;
   nombre: string;
   stock: number;
+  alerta?: boolean; // 👈 propiedad opcional para HU2
   createdAt?: string;
   updatedAt?: string;
 }

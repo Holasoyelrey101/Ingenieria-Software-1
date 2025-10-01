@@ -15,9 +15,15 @@ export class InventarioComponent implements OnInit {
   constructor(private productoService: ProductoService) {}
 
   ngOnInit(): void {
-    this.productoService.getProductos().subscribe(data => {
-      console.log('📦 Datos recibidos del backend:', data); // 
-      this.productos = data;
+  this.productoService.getProductos().subscribe(data => {
+    const agrupados: any = {};
+    data.forEach(p => {
+      if (!agrupados[p.nombre]) {
+        agrupados[p.nombre] = { ...p, stock: 0 };
+      }
+      agrupados[p.nombre].stock += p.stock;
     });
-  }
+    this.productos = Object.values(agrupados);
+  });
+}
 }

@@ -1,19 +1,20 @@
 <div class="container mt-4">
-  <h2>📦 Inventario</h2>
-  <table border="1" cellpadding="8" cellspacing="0">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Nombre</th>
-        <th>Stock</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let p of productos">
-        <td>{{ p.id }}</td>
-        <td>{{ p.nombre }}</td>
-        <td>{{ p.stock }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <h2 style="margin-bottom: 20px;">📦 Inventario</h2>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+    <div *ngFor="let p of productos"
+         style="border: 1px solid #ccc; border-radius: 10px; padding: 15px; width: 220px;
+                box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+                background-color: {{ p.alerta ? '#ffe6e6' : '#e6ffe6' }};">
+      
+      <h3 style="margin: 0; font-size: 1.2rem;">{{ p.nombre }}</h3>
+      <p><strong>ID:</strong> {{ p.id }}</p>
+      <p><strong>Stock:</strong> {{ p.stock }}</p>
+      <p>
+        <strong>Estado:</strong>
+        <span *ngIf="p.alerta" style="color: red; font-weight: bold;">⚠️ Bajo stock</span>
+        <span *ngIf="!p.alerta" style="color: green; font-weight: bold;">✔️ OK</span>
+      </p>
+    </div>
+  </div>
 </div>
