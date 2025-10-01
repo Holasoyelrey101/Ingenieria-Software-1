@@ -8,8 +8,11 @@ Antes de comenzar asegúrate de tener instalado:
 
 # Backend (Node.js + Express + Sequelize + MySQL)
 ###  Instalación
-```bash
+bash
 cd backend
 npm install
 
-#sad
+# Configuración de la base de datos
+ 1) creacion de la base de datos llamada luxchile_db
+ 2) Editar el archivo backend/config/database.js y colocar tus credenciales mysql <img width="560" height="76" alt="image" src="https://github.com/user-attachments/assets/8f382caf-3d29-4d3f-86ce-d5bef1e3bd27" />
+
