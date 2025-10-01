@@ -1,0 +1,19 @@
+<div class="container mt-4">
+  <h2>📦 Inventario</h2>
+  <table border="1" cellpadding="8" cellspacing="0">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Stock</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let p of productos">
+        <td>{{ p.id }}</td>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.stock }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
