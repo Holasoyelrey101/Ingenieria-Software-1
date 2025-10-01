@@ -4,7 +4,8 @@ Antes de comenzar asegúrate de tener instalado:
 1) Node.js
 2) MySQL
 3) GitBash
-4) Angular -> npm install –g @angular/cli (en la consola del gitbash o powershell)
+4) Gestor de bases de datos como HeidiSQL - SQLPANEL etc (recomiendo Heidi)
+5) Angular (en la consola del gitbash o powershell del Frontend)
 
 # Backend (Node.js + Express + Sequelize + MySQL)
 ###  Instalación
@@ -19,5 +20,6 @@ Antes de comenzar asegúrate de tener instalado:
 # Frontend (Angular)
 ###  Instalación
 1) cd frontend
-2) npm install
-3) Arrancar el proyecto con ng serve y abrir http://localhost:4200
+2) npm install –g @angular/cli
+3) npm install
+4) Arrancar el proyecto con ng serve y abrir http://localhost:4200
