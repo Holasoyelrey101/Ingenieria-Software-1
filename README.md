@@ -7,7 +7,9 @@ Antes de comenzar asegúrate de tener instalado:
 4) Angular -> npm install –g @angular/cli (en la consola del gitbash o powershell)
 
 # Backend (Node.js + Express + Sequelize + MySQL)
-### 📥 Instalación
+###  Instalación
 ```bash
 cd backend
 npm install
+
+#sad
