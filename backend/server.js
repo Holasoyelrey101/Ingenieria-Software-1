@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(cors({
   origin: 'http://localhost:4200'
 }));
-
+console.log("🌐 CORS habilitado para http://localhost:4200");
 // Rutas
 app.use('/api/productos', productoRoutes);
 
