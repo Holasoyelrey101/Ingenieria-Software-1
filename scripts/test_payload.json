@@ -1,0 +1,6 @@
+{
+  "origin": { "lat": -33.45, "lng": -70.66 },
+  "destination": { "lat": -33.437, "lng": -70.65 },
+  "waypoints": [],
+  "optimize": true
+}

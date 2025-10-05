@@ -1,0 +1,31 @@
+{
+  "name": "lux-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@react-google-maps/api": "^2.16.0",
+    "axios": "^1.4.0",
+    "leaflet": "^1.9.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.23.1",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.3",
+    "@types/react": "^18.3.25",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.0.0"
+  }
+}

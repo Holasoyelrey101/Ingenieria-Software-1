@@ -1,0 +1,13 @@
+.root { padding:16px; }
+.header { display:flex; gap:12px; align-items:center; }
+.list { margin-top:16px; border:1px solid #ddd; border-radius:6px; overflow:hidden; }
+.row { display:grid; grid-template-columns:80px 120px 1fr 90px 110px; gap:8px; padding:8px 12px; border-bottom:1px solid #eee; align-items:center; }
+.row:nth-child(odd){ background:#fafafa; }
+.rowHeader { background:#f0f0f0; font-weight:600; }
+.badge { padding:2px 6px; border-radius:6px; font-size:12px; font-weight:600; background:#ddd; }
+.badgeCrit { background:#ff5252; color:#fff; }
+.badgeWarn { background:#ffcc00; }
+.empty { padding:20px; text-align:center; }
+.ackBtn { font-size:12px; }
+.filters { display:flex; gap:8px; }
+.error { color:crimson; margin-top:8px; }

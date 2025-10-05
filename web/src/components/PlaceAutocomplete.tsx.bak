@@ -1,0 +1,225 @@
+import React, { useEffect, useRef, useState } from 'react';
+import styled from '@emotion/styled';
+
+interface PlaceGeometry {
+  location: {
+    lat: () => number;
+    lng: () => number;
+  };
+}
+
+interface PlaceResult {
+  place_id?: string;
+  geometry?: PlaceGeometry;
+  formatted_address?: string;
+  description?: string;
+}
+
+interface PlaceAutocompleteProps {
+  onPlaceSelect: (place: google.maps.places.PlaceResult) => void;
+  googleMapsApiKey: string;
+  placeholder?: string;
+}
+
+const SearchContainer = styled.div`
+  width: 100%;
+  background: white;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.3);
+  font-family: Roboto, Arial, sans-serif;
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+  &:focus {
+    outline: none;
+    border-color: #4d90fe;
+  }
+`;
+
+const SuggestionsList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  max-height: 200px;
+  overflow-y: auto;
+`;
+
+const SuggestionItem = styled.li`
+  padding: 8px 12px;
+  cursor: pointer;
+  &:hover {
+    background-color: #f0f0f0;
+  }
+`;
+
+const PlaceAutocomplete: React.FC<PlaceAutocompleteProps> = ({ 
+  onPlaceSelect,
+  googleMapsApiKey,
+  placeholder = "Buscar lugar..."
+}) => {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
+  const placesService = useRef<google.maps.places.PlacesService | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!googleMapsApiKey) {
+      setError('API key is required');
+      return;
+    }
+
+    try {
+      if (window.google && window.google.maps) {
+        autocompleteService.current = new google.maps.places.AutocompleteService();
+        if (inputRef.current) {
+          placesService.current = new google.maps.places.PlacesService(inputRef.current);
+        }
+      } else {
+        setError('Google Maps API no se ha cargado correctamente');
+      }
+    } catch (err) {
+      setError('Error al inicializar los servicios de Google Maps');
+      console.error('Error initializing Google Maps services:', err);
+    }
+  }, [googleMapsApiKey]);
+
+  const handleSearch = async () => {
+    if (!query) {
+      setSuggestions([]);
+      return;
+    }
+
+    if (!autocompleteService.current) {
+      setError('Servicio de autocompletado no disponible');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const request = {
+        input: query,
+        componentRestrictions: { country: 'cl' },
+        types: ['geocode', 'establishment']
+      };
+
+      autocompleteService.current.getPlacePredictions(request, (predictions, status) => {
+        setIsLoading(false);
+        
+        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+          const places = predictions.map(prediction => ({
+            place_id: prediction.place_id,
+            formatted_address: prediction.description
+          }));
+          setSuggestions(places as PlaceResult[]);
+          setShowSuggestions(true);
+        } else {
+          setError('Error al buscar lugares: ' + status);
+          setSuggestions([]);
+        }
+      });
+    } catch (err) {
+      setIsLoading(false);
+      setError('Error en la búsqueda de lugares');
+      console.error('Error in place search:', err);
+      setSuggestions([]);
+    }
+      // Usar Google Places API
+      const request = {
+        input: query,
+        componentRestrictions: { country: 'cl' },
+        types: ['geocode', 'establishment']
+      };
+
+      autocompleteService.current.getPlacePredictions(request, (predictions, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+          const places = predictions.map(prediction => ({
+            place_id: prediction.place_id,
+            formatted_address: prediction.description
+          }));
+          setSuggestions(places as PlaceResult[]);
+          setShowSuggestions(true);
+          setShowSuggestions(true);
+        } else {
+          setError('Error al buscar lugares: ' + status);
+          setSuggestions([]);
+        }
+      });
+    } catch (err) {
+      setIsLoading(false);
+      setError('Error en la búsqueda de lugares');
+      console.error('Error in place search:', err);
+      setSuggestions([]);
+    }
+            location: {
+              lat: () => parseFloat(item.lat),
+              lng: () => parseFloat(item.lon)
+            }
+          },
+          formatted_address: item.display_name
+        }));
+        setSuggestions(places);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Error en geocoding:', error);
+        setSuggestions([]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleSearch();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [query]);
+
+  const handleSuggestionClick = (place: PlaceResult) => {
+    if (place.formatted_address) {
+      setQuery(place.formatted_address);
+      onPlaceSelect(place);
+      setShowSuggestions(false);
+    }
+  };
+
+  return (
+    <SearchContainer>
+      <Input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => setShowSuggestions(true)}
+        placeholder={placeholder}
+      />
+      {showSuggestions && suggestions.length > 0 && (
+        <SuggestionsList>
+          {suggestions.map((place, index) => (
+            <SuggestionItem
+              key={index}
+              onClick={() => handleSuggestionClick(place)}
+            >
+              {place.formatted_address}
+            </SuggestionItem>
+          ))}
+        </SuggestionsList>
+      )}
+    </SearchContainer>
+  );
+}
