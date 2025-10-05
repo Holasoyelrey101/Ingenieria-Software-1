@@ -1,0 +1,19 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: lux
+      POSTGRES_PASSWORD: lux
+      POSTGRES_DB: inventario
+    ports:
+      - "5432:5432"
+  inventario:
+    build: ./ms_inventario
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+psycopg2://lux:lux@db:5432/inventario
+    command: ["python", "-m", "ms_inventario.app.main"]
+    ports:
+      - "8000:8000"
