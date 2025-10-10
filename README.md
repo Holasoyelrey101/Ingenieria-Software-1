@@ -1,12 +1,12 @@
 # LuxChile ERP — Gestión de Inventario (MVP)
 
-Sistema modular orientado a microservicios para la gestión de inventario, logística y visualización web. Stack principal:
+Sistema modular orientado a microservicios para la gestión de inventario, logística y visualización web. Stack principal (MVP):
 
 - Backend: FastAPI (Python), SQLAlchemy, Alembic (migraciones), patrones BFF/Gateway.
 - Frontend: React + Vite + TypeScript (Google Maps SDK / Autocomplete / Rutas).
-- Infraestructura: Docker Compose (Postgres, Kafka, RabbitMQ, Traefik, Prometheus, Grafana, Loki, Mailhog).
+- Infraestructura: Docker Compose (Postgres).
 - Observabilidad: /health y (en progreso) /metrics, futura trazabilidad.
-- Mensajería: Kafka (event streaming) y RabbitMQ (colas de trabajo) provisionados.
+  
 
 > Este README se centra en levantar y entender el estado actual. Para una visión conceptual adicional revisar `ARCHITECTURE.md`.
 
@@ -23,7 +23,7 @@ Sistema modular orientado a microservicios para la gestión de inventario, logí
 3. Levantar infraestructura esencial (desde la carpeta `infra`):
 	```powershell
 	cd infra
-	docker compose up -d postgres kafka rabbitmq mailhog prometheus grafana loki traefik
+	docker compose up -d postgres
 	```
 4. Construir y levantar servicios de aplicación:
 	```powershell
@@ -34,9 +34,7 @@ Sistema modular orientado a microservicios para la gestión de inventario, logí
 	- Gateway: http://localhost:8000/health
 	- Inventario: http://localhost:8002/health
 	- Logística: http://localhost:8001/health
-	- Prometheus: http://localhost:9090
-	- Grafana: http://localhost:3000 (usuario/pass por defecto de la imagen)
-	- Traefik dashboard: http://localhost:8080
+    
 
 Para reconstruir después de cambios en código backend/frontend: `docker compose up -d --build <servicio>`.
 
@@ -50,13 +48,9 @@ Para reconstruir después de cambios en código backend/frontend: `docker compos
 | ms-logistica | 8001 (interno 8000) | Optimización rutas / geocoding | MVP inicial |
 | web | 5173 (Docker 80→5173) | UI React (Inventario + Map) | MVP |
 | postgres | 5432 | Base de datos principal | En uso |
-| kafka | 9092 | Event streaming | Provisionado |
-| rabbitmq | 5672 / 15672 | Mensajería / panel | Provisionado |
-| prometheus | 9090 | Métricas scraping | Parcial |
-| grafana | 3000 | Dashboards | Parcial |
-| loki | 3100 | Logs centralizados | Provisionado |
 
-Servicios placeholder listados en `docker-compose` (ms-seguridad, ms-activos, ms-rrhh, ms-reportes) aún no tienen código integrado.
+
+Servicios placeholder listados en `docker-compose` (ms-seguridad, ms-activos, ms-rrhh, ms-reportes) aún no tienen código integrado. Para el MVP no se incluyen servicios de mensajería u observabilidad.
 
 ---
 ## 📦 Estructura de carpetas relevante
@@ -95,7 +89,7 @@ La agregación futura vía `gateway` permitirá ofrecer subset público: `/api/i
 - Scripts iniciales en `infra/sql/` (por ejemplo `001_init_schema.sql`).
 - Migraciones: Gateway y ms-logistica incluyen estructura Alembic; ms-inventario puede incorporar migraciones en iteraciones siguientes.
 
-Para inspeccionar DB: levantar `pgadmin` (puerto 5050) y conectar con credenciales.
+Para inspeccionar DB: opcionalmente levantar `pgadmin` (puerto 5050) y conectar con credenciales.
 
 ---
 ## 🌐 Frontend
@@ -122,11 +116,9 @@ npm run dev
 - RBAC / Roles y permisos (pendiente implementación persistente).
 
 ---
-## 📊 Observabilidad & Logs
+## 📊 Observabilidad (Roadmap)
 
-- Prometheus y Grafana corren pero dashboards no provisionados aún.
-- Loki preparado para ingesta de logs (config pipeline pendiente).
-- Próximo: añadir `/metrics` Prometheus FastAPI con `prometheus_client` o `prometheus-fastapi-instrumentator`.
+Se puede añadir instrumentación `/metrics` en iteraciones siguientes si se requiere.
 
 ---
 ## 🧪 Smoke Test rápido
@@ -144,7 +136,7 @@ Configura previamente variables necesarias (.env y servicios arriba).
 | Gateway 502 / Bad Gateway | Servicio backend aún construyendo | `docker compose logs -f gateway` y reintentar |
 | Frontend no carga mapas | Falta `VITE_GOOGLE_MAPS_API_KEY` | Añadir clave válida en `web/.env` |
 | DB connection refused | Postgres no listo | `docker compose logs -f postgres` esperar/ reiniciar |
-| Kafka no inicia | Puerto ocupado / config quorum | Liberar puerto 9092 / reiniciar stack |
+|  |  |  |
 
 Logs de un servicio específico:
 ```powershell
@@ -155,9 +147,9 @@ docker compose logs -f ms-inventario
 ## 🗺 Roadmap sugerido
 
 1. Migraciones unificadas (Alembic) para inventario.
-2. Instrumentación `/metrics` + dashboards Grafana.
+2. Instrumentación `/metrics` (opcional) y observabilidad básica.
 3. Autenticación completa + RBAC + refresh tokens.
-4. Eventos de stock (Kafka) y colas de reabastecimiento (RabbitMQ).
+4. Eventos de stock y colas (mensajería) si el alcance lo requiere.
 5. Optimización avanzada rutas (matriz distancias + heurísticas).
 6. Integración CI (lint, tests, build) y CD.
 7. Hardening seguridad (headers, rate limiting, audit log).
@@ -179,7 +171,7 @@ Proyecto interno educativo / PoC. Ajustar licencia según necesidad antes de hac
 | Frontend UI | MVP |
 | Observabilidad | Parcial |
 | Seguridad avanzada | Pendiente |
-| Mensajería | Provisionada |
+| Mensajería | No incluida en MVP |
 
 ---
 Si necesitas una versión reducida para una demo rápida, puedes eliminar servicios placeholder y reconstruir el compose antes de subir a producción.
