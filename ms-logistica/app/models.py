@@ -14,3 +14,16 @@ class DeliveryRequest(Base):
     payload = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Incident(Base):
+    __tablename__ = 'incidents'
+    id = Column(Integer, primary_key=True, index=True)
+    route_id = Column(Integer, nullable=True)
+    route_stop_id = Column(Integer, nullable=True)
+    vehicle_id = Column(Integer, nullable=True)
+    driver_id = Column(Integer, nullable=True)
+    severity = Column(String(16), nullable=True)
+    type = Column(String(64), nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
