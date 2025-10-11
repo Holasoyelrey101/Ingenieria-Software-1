@@ -19,6 +19,8 @@ class DeliveryRequest(Base):
 class Incident(Base):
     __tablename__ = 'incidents'
     id = Column(Integer, primary_key=True, index=True)
+    # Link to a delivery request for traceability
+    delivery_request_id = Column(Integer, nullable=True)
     route_id = Column(Integer, nullable=True)
     route_stop_id = Column(Integer, nullable=True)
     vehicle_id = Column(Integer, nullable=True)
