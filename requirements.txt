@@ -10,9 +10,6 @@ passlib[bcrypt]
 pyotp
 reportlab
 openpyxl
-celery
-kafka-python
-prometheus-client
 structlog
 requests
 httpx
