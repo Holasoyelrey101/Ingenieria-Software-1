@@ -1,7 +1,7 @@
 const API_LOG =
   import.meta.env.VITE_API_LOGISTICA ||
   import.meta.env.VITE_API_URL ||
-  'http://localhost:8001';
+  `${location.protocol}//${location.hostname}:8001`;
 
 export type DeliveryRequest = {
   id: number;
@@ -45,5 +45,32 @@ export async function postIncident(payload: IncidentCreate): Promise<IncidentOut
     try { detail = await res.text(); } catch {}
     throw new Error('Error al registrar incidente: ' + detail);
   }
+  return res.json();
+}
+
+export type IncidentsFilter = {
+  delivery_request_id?: number;
+  route_id?: number;
+  route_stop_id?: number;
+  vehicle_id?: number;
+  driver_id?: number;
+  severity?: 'low'|'medium'|'high';
+  type?: string;
+  created_from?: string; // ISO
+  created_to?: string;   // ISO
+  limit?: number;
+  offset?: number;
+  order?: 'asc'|'desc';
+};
+
+export async function getIncidents(filter: IncidentsFilter = {}): Promise<IncidentOut[]> {
+  const params = new URLSearchParams();
+  Object.entries(filter).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    params.set(k, String(v));
+  });
+  const url = `${API_LOG}/maps/incidents${params.toString() ? `?${params.toString()}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Error al cargar incidentes');
   return res.json();
 }

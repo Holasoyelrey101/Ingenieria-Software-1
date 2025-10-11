@@ -50,7 +50,7 @@ Para reconstruir después de cambios en código backend/frontend: `docker compos
 | postgres | 5432 | Base de datos principal | En uso |
 
 
-Servicios placeholder listados en `docker-compose` (ms-seguridad, ms-activos, ms-rrhh, ms-reportes) aún no tienen código integrado. Para el MVP no se incluyen servicios de mensajería u observabilidad.
+Servicios placeholder listados en `docker-compose` (ms-seguridad, ms-activos, ms-rrhh, ms-reportes) aún no tienen código integrado. Para el MVP no se incluyen servicios de mensajería ni stack de observabilidad avanzada (Kafka, RabbitMQ, Prometheus, Grafana, Loki) ni reverse proxy (Traefik).
 
 ---
 ## 📦 Estructura de carpetas relevante

@@ -6,6 +6,5 @@ pyotp
 httpx
 python-dotenv
 structlog
-prometheus-client
 sqlalchemy
 psycopg2-binary
