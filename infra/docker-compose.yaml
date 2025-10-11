@@ -1,0 +1,75 @@
+services:
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: lux
+      POSTGRES_PASSWORD: luxpass
+      POSTGRES_DB: erp
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      PGCLIENTENCODING: UTF8
+    ports: ["5432:5432"]
+    volumes: [db:/var/lib/postgresql/data]
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@lux.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports: ["5050:80"]
+
+
+  gateway:
+    build: ../gateway
+    env_file: ../.env.sample
+    depends_on: [postgres]
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  ms-inventario:
+    build: ../ms-inventario
+    env_file: ../.env.sample
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+
+  ms-logistica:
+    build: ../ms-logistica
+    env_file: ../.env.sample
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
+    ports: ["8001:8000"]
+    healthcheck:
+      test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  web:
+    build: ../web
+    env_file: ../web/.env
+    environment:
+      # Permite sobreescribir desde entorno host si se desea
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_INVENTARIO: ${VITE_API_INVENTARIO:-http://localhost:8002}
+      VITE_API_LOGISTICA: ${VITE_API_LOGISTICA:-http://localhost:8001}
+      VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
+    ports: ["5173:80"]
+    depends_on: [gateway]
+
+volumes:
+  db:

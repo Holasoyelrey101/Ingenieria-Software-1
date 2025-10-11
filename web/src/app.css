@@ -1,0 +1,16 @@
+/* Tailwind base reset */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Convenience utility classes for the layout */
+.layout { @apply flex h-screen font-sans; }
+.sidebar { @apply w-64 bg-slate-900 text-slate-100 p-4 box-border flex flex-col; }
+.sidebar h2 { @apply mt-0 text-xl font-semibold; }
+.sidebar nav ul { @apply list-none m-0 p-0; }
+.sidebar nav li { @apply my-1; }
+.sidebar nav a { @apply text-slate-300 no-underline block px-2 py-1 rounded font-medium; }
+.sidebar nav a.active { @apply bg-slate-800 text-white; }
+.sidebar nav a:hover { @apply bg-slate-800 text-white; }
+.sidebar .small { @apply text-xs mt-auto opacity-70; }
+.main { @apply flex-1 relative p-4; }

@@ -1,0 +1,10 @@
+.root { padding:16px; }
+.headerBar { display:flex; gap:12px; align-items:center; }
+.badge { padding:2px 8px; border-radius:8px; font-weight:600; background:#e0e0e0; }
+.badgeAlert { background:#ffcc00; }
+.table { margin-top:12px; width:100%; border-collapse:collapse; }
+.table th { border-bottom:1px solid #ccc; text-align:left; padding:4px; }
+.table td { border-bottom:1px solid #eee; padding:4px; }
+.actions { text-align:center; }
+.empty { padding:12px; text-align:center; }
+.error { color:crimson; }
