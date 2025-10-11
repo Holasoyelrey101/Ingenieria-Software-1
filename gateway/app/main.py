@@ -221,3 +221,11 @@ def get_route_request(request_id: int, db: Session = Depends(get_db)):
         "status": item.status,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
+
+# Import optional reports module (HU11)
+try:
+    from . import reportes
+    app.include_router(reportes.router)
+    logging.info("Reportes consolidados (HU11) habilitado")
+except Exception as e:
+    logging.warning(f"Reportes (HU11) no disponible: {e}")
