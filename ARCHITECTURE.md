@@ -1,106 +1,86 @@
-# ERP LuxChile — Arquitectura MVP
+# ERP LuxChile — Arquitectura MVP (actualizada)
 
-Fecha: 2025-10-02
+Fecha: 2025-10-10
 
 Resumen
 -------
-Este documento describe la arquitectura propuesta para un MVP productivo del ERP LuxChile. El sistema está diseñado como una arquitectura de microservicios con FastAPI (Python) en backend, PostgreSQL como almacenamiento relacional, React + Vite en frontend y mensajería asíncrona para eventos de dominio (Kafka/RabbitMQ). Incluye integración con Google Maps (Maps JS + Directions + Places) para visualización y ruteo.
+Este documento describe la arquitectura efectiva del MVP del ERP LuxChile. El sistema está diseñado con una topología mínima y funcional: microservicios en FastAPI (Python), PostgreSQL como base de datos, y frontend en React + Vite. Se elimina del alcance del MVP cualquier dependencia de mensajería (Kafka/RabbitMQ), reverse proxy (Traefik) y stack de observabilidad avanzada (Prometheus/Grafana/Loki). Se mantiene la integración con Google Maps (Maps JS + Directions + Places) para visualización y ruteo.
 
 Componentes principales
 ----------------------
-- API Gateway / BFF (FastAPI): autenticación (OAuth2/JWT), 2FA (TOTP), RBAC por rol. Expone endpoints consolidados al frontend.
+- API Gateway / BFF (FastAPI): capa de orquestación y agregación simple; seguridad básica (skeleton). Expone endpoints consolidados al frontend.
 - Microservicios (FastAPI):
-  - ms-inventario: consultas de stock, movimientos, alertas stock_bajo_detectado.
-  - ms-logistica: geocodificación, cálculo de rutas, optimizador de rutas, asignación vehículo/conductor.
-  - ms-seguridad: registro de incidentes, evidencia (enlaces a cámaras), integración con mensajería.
-  - ms-activos: CRUD de activos, mantenciones, recordatorios y calendario.
-  - ms-rrhh: turnos, asistencias y APIs para control horario.
-  - ms-reportes: ETL, generación/exportación a PDF y Excel, jobs batch (Celery).
-- Base de datos: PostgreSQL 15+ (un esquema por servicio; migraciones via Alembic por servicio o repositorio centralizado de migraciones).
-- Mensajería/Eventos: Kafka (preferido para at-least-once, particionado) o RabbitMQ (si se prefiere simplicidad). Topicos/events: stock_bajo_detectado, incidente_registrado, mantencion_programada, movimiento_registrado.
-- Observabilidad: Prometheus (metria), Grafana (dashboards), Loki (logs JSON), tracing (opentelemetry opcional).
-- Infra local/dev: docker-compose con Traefik (TLS dev), pgAdmin, Mailhog, pg (Postgres), Kafka/RabbitMQ.
-- Frontend: React + Vite + TypeScript. Integración con Google Maps JS API y Places API mediante llave restringida de navegador.
+  - ms-inventario: consultas de stock, movimientos, alertas.
+  - ms-logistica: geocodificación, cálculo de rutas, optimización sencilla y creación de incidentes.
+- Base de datos: PostgreSQL 15 (única instancia). Migraciones aplicadas mediante scripts SQL ordenados en `infra/sql` (001, 002, 003…).
+- Observabilidad básica: healthchecks (`/health`) y opción de métricas simples; logs a stdout.
+- Infra local/dev: docker-compose con Postgres, pgAdmin (opcional), gateway, ms-inventario, ms-logistica y web.
+- Frontend: React + Vite + TypeScript. Integración con Google Maps JS API y Places API.
 
 Diagrama lógico (C4 - resumen)
 -----------------------------
-- Nivel 1 (Sistema): ERP LuxChile expone UI web y APIs públicas internas.
-- Nivel 2 (Contenedores): Frontend (Vite/React), Gateway (FastAPI), múltiples microservicios (FastAPI), PostgreSQL, Kafka/RabbitMQ, Observabilidad (Prometheus/Grafana/Loki).
-- Nivel 3 (Componentes claves): en ms-logistica: MapClient, RouteOptimizer, DirectionsProxy, JobWorker.
+- Nivel 1 (Sistema): ERP LuxChile expone UI web y APIs internas.
+- Nivel 2 (Contenedores): Frontend (Vite/React), Gateway (FastAPI), ms-inventario (FastAPI), ms-logistica (FastAPI), PostgreSQL.
+- Nivel 3 (Componentes claves): en ms-logistica: MapClient, RouteOptimizer (heurística simple), DirectionsProxy.
 
 Requisitos funcionales (síntesis)
 --------------------------------
-- Inventario: consultar stock por bodega, movimientos de entrada/salida, alertas configurables (stock_bajo_detectado).
-- Logística: planificar rutas optimizadas, asignar vehículo y conductor, ver y seguir la ruta en mapa (Google Maps), confirmar entregas.
-- Seguridad: registrar incidentes con metadatos, vincular evidencia de cámaras, alertas y escalamiento.
-- Activos: CRUD de activos y gestión de mantenciones, recordatorios y generación de órdenes de trabajo.
-- RR.HH.: administrar turnos, registrar asistencias, calcular horas trabajadas.
-- Reportes/ETL: extracción y transformación periódica, reportes consolidados exportables a PDF/Excel.
+- Inventario: consultar stock por bodega, movimientos de entrada/salida, alertas básicas.
+- Logística: geocodificar, calcular rutas, crear incidentes asociados a rutas/paradas/vehículos/conductores.
+ - Logística: geocodificar, calcular rutas, crear incidentes asociados a rutas/paradas/vehículos/conductores. Todo incidente DEBE estar vinculado a un `delivery_request` para asegurar trazabilidad.
 
 Requisitos no funcionales (síntesis)
 -----------------------------------
-- Disponibilidad objetivo >= 99.5% (plan de alta disponibilidad en producción: múltiples réplicas, réplica DB, backup, monitorización).
-- Latencia: P99 consultas inventario < 5s.
-- Frescura de stock: actualizaciones visibles en UI <= 60s (eventos + cache invalidation).
-- Usabilidad: flujos clave en <= 3 pasos.
-- Seguridad: 2FA (TOTP), JWT con rotación, TLS (en tránsito), cifrado en reposo para datos sensibles.
-- Accesibilidad: WCAG 2.1 AA para la interfaz pública.
-- Cumplimiento legal: Ley 19.628 (Chile) para protección de datos personales — almacenar consentimiento, derecho a acceso/rectificación/borrado.
+- Objetivo MVP: simplicidad operativa y reproducibilidad local vía Docker.
+- Latencia: P99 consultas inventario < 5s (objetivo de referencia).
+- Seguridad: JWT (skeleton) y manejo de variables `.env`; TLS y 2FA quedan fuera del MVP.
+- Cumplimiento: buenas prácticas de datos; formalización posterior.
 
 Integración con Google Maps — detalles
 -------------------------------------
 Arquitectura de integración:
-- Claves separadas: una llave de navegador para el frontend (VITE_GOOGLE_MAPS_API_KEY, restricted by HTTP referrer) y una llave de servidor para backend (GOOGLE_MAPS_SERVER_KEY, restricted by IP).
-- ms-logistica expone endpoints internos seguros:
-  - POST /maps/geocode — body: {"address": "..."} → server-side Geocoding API call, devuelve {lat, lng, formatted_address}.
-  - POST /maps/directions — body: {"origin":..., "destination":..., "waypoints": [...], "optimize": true} → llama a Directions API (server key) y devuelve ruta, polyline, distancia, duración.
-- Frontend usa @react-google-maps/api para renderizar el mapa, Autocomplete (Places API) para origen/destino y solicita rutas al Gateway/BFF.
-- El Gateway valida permisos (RBAC) y reenvía las peticiones a ms-logistica.
+- Llaves separadas: una llave de navegador para el frontend (VITE_GOOGLE_MAPS_API_KEY). La llave de servidor puede omitirse en MVP si las llamadas a Maps se realizan cliente-side o via ms-logistica con configuración simple.
+- ms-logistica expone endpoints internos:
+  - POST /maps/geocode — body: {"address": "..."} → Geocoding API.
+  - POST /maps/directions — body: {"origin":..., "destination":..., "waypoints": [...], "optimize": true} → Directions API.
+- Frontend usa @react-google-maps/api para mapa y Autocomplete (Places API) y solicita rutas al Gateway/BFF.
 
 Variables de entorno clave
 --------------------------
 - POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
-- JWT_SECRET, JWT_ALGORITHM
-- GOOGLE_MAPS_SERVER_KEY (server-side, no exponer)
+- JWT_SECRET, JWT_ALGORITHM (skeleton)
 - VITE_GOOGLE_MAPS_API_KEY (frontend)
-- KAFKA_BOOTSTRAP_SERVERS / RABBITMQ_URL
-- PROMETHEUS multiprocess env (si aplica)
 
 Seguridad y autenticación
 -------------------------
-- Autenticación: OAuth2 Password + JWT (access/refresh). 2FA con TOTP (pyotp) en el Gateway.
-- Autorización: RBAC por rol con scopes mínimos (admin, auditor, logística, bodega, seguridad, rrhh).
-- Protección de secretos: nunca embebidos en imágenes; usar env vars y vault en producción.
+- Autenticación: JWT básico (skeleton) en Gateway. OAuth2/2FA quedan fuera del MVP.
+- Protección de secretos: no embebidos, usar variables de entorno.
 
-Mensajería y sincronización
----------------------------
-- Uso de Kafka para eventos de dominio. Cada microservicio publica/consume los eventos relevantes.
-- Ejemplo: ms-inventario publica stock_bajo_detectado → ms-logistica y ms-reportes consumen.
-- Para tareas programadas y ETL usar Celery con backend Redis o la cola Kafka/RabbitMQ.
+Mensajería y sincronización (fuera de alcance MVP)
+-------------------------------------------------
+Sin Kafka/RabbitMQ en el MVP. Flujos asíncronos pueden considerarse en iteraciones futuras.
 
 Persistencia y migraciones
 --------------------------
-- Cada microservicio tiene su propio esquema en PostgreSQL (naming conventions y prefijo schema por servicio opcional).
-- Migraciones con Alembic (por servicio). Mantener versionamiento en repo.
+- PostgreSQL 15 único. Esquemas y tablas definidos mediante scripts SQL en `infra/sql` numerados:
+  - 001_init_schema.sql (inventario)
+  - 002_logistica_base.sql (logística)
+  - 003_incidents_add_vehicle_driver.sql (HU5)
+  - seed_clean.sql (datos de ejemplo)
+- Recomendación: mantener scripts idempotentes (IF NOT EXISTS) y documentar orden de aplicación.
 
-Observabilidad
---------------
-- Métricas: exponer /metrics (prometheus_client) por cada servicio.
-- Logs: JSON structured logs con structlog enviados a stdout; Loki recogerá dichos logs.
-- Dashboards: Grafana con dashboards por servicio, alertas (Prometheus Alertmanager en producción).
+Observabilidad (básica)
+----------------------
+- Healthchecks (`/health`) y logs a stdout. Métricas opcionales fuera de alcance del MVP.
 
-Estructura de repositorios sugerida
-----------------------------------
+Estructura de repositorios (MVP)
+-------------------------------
 - /gateway
 - /ms-inventario
 - /ms-logistica
-- /ms-seguridad
-- /ms-activos
-- /ms-rrhh
-- /ms-reportes
 - /web
-- /infra (docker-compose, Traefik, prometheus, grafana)
-- /docs
+- /infra (docker-compose y sql)
+- /docs (opcional)
 
 Notas sobre ruteo optimizado (algoritmo inicial)
 -----------------------------------------------
@@ -117,14 +97,17 @@ Contrato API (ejemplos)
   - request: {"origin": {lat,lng}|{address}, "destination": {...}, "waypoints": [...], "optimize": bool}
   - response: {"polyline": string, "legs": [...], "distance_m": int, "duration_s": int, "steps": [...]} 
 
-Checklist de entrega MVP (mínimo para productivo)
--------------------------------------------------
-1. Documentación (este archivo).
-2. `requirements.txt` para backend(s).
-3. `docker-compose.yaml` con Postgres, Kafka/RabbitMQ, Mailhog, Prometheus, Grafana, Traefik, gateway, ms-logistica, ms-inventario, web.
-4. ms-logistica implementado con endpoints /maps/geocode y /maps/directions y algoritmo NN+2opt.
-5. Frontend react con mapa, autocomplete y dibujado de rutas.
-6. Observabilidad básica: /metrics endpoints y logs JSON.
+- POST /maps/incidents
+  - request: {"delivery_request_id": int, "type": string, "description": string}
+  - behavior: la "severity" se deriva del "type" (por ejemplo: theft/accident → high; breakdown/smoke/lost_contact → medium; delay → low). Campos de vehículo/conductor no los establece el guardia desde este panel.
+
+Checklist MVP
+-------------
+1. Documentación (este archivo y README).
+2. `docker-compose.yaml` con Postgres, pgAdmin (opcional), gateway, ms-logistica, ms-inventario, web.
+3. ms-logistica con /maps/geocode, /maps/directions e incidentes.
+4. Frontend React con mapa, autocomplete y rutas.
+5. Scripts SQL en `infra/sql` aplicados (001, 002, 003, seed).
 
 Referencias y cumplimiento
 -------------------------

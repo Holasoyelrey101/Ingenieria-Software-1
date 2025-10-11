@@ -12,6 +12,7 @@ from fastapi import Depends
 from .db import SessionLocal
 from .models import DeliveryRequest, Incident
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 def encode_polyline(coords):
     # coords: list of (lat, lng) tuples or dicts {lat,lng}
@@ -241,10 +242,13 @@ def list_delivery_requests(limit: int = 100, db: Session = Depends(get_db)):
 # Incidents endpoints (HU5)
 
 class IncidentCreate(BaseModel):
+    # Required link to delivery request for traceability
+    delivery_request_id: int
     route_id: Optional[int] = None
     route_stop_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     driver_id: Optional[int] = None
+    # severity will be derived from type if not provided; clients shouldn't send it
     severity: Optional[str] = None
     type: Optional[str] = None
     description: Optional[str] = None
@@ -252,6 +256,7 @@ class IncidentCreate(BaseModel):
 
 class IncidentOut(BaseModel):
     id: int
+    delivery_request_id: Optional[int]
     route_id: Optional[int]
     route_stop_id: Optional[int]
     vehicle_id: Optional[int]
@@ -269,11 +274,15 @@ def create_incident(req: IncidentCreate, db: Session = Depends(get_db)):
         if _id is None:
             return True
         try:
-            q = f"SELECT 1 FROM {table} WHERE id = :id LIMIT 1"
+            q = text(f"SELECT 1 FROM {table} WHERE id = :id LIMIT 1")
             return db.execute(q, {"id": _id}).first() is not None
         except Exception:
             # If table missing (dev), skip strict check
             return True
+
+    # Validate delivery request existence (required)
+    if not exists('delivery_requests', req.delivery_request_id):
+        raise HTTPException(status_code=404, detail={"error": "delivery_request_not_found"})
 
     if req.route_id is not None and not exists('routes', req.route_id):
         raise HTTPException(status_code=404, detail={"error": "route_not_found"})
@@ -284,12 +293,29 @@ def create_incident(req: IncidentCreate, db: Session = Depends(get_db)):
     if req.driver_id is not None and not exists('drivers', req.driver_id):
         raise HTTPException(status_code=404, detail={"error": "driver_not_found"})
 
+    # Derive severity from type if not provided (simple mapping)
+    sev = req.severity
+    if not sev and req.type:
+        t = (req.type or '').lower()
+        mapping = {
+            'theft': 'high',
+            'robbery': 'high',
+            'assault': 'high',
+            'breakdown': 'medium',
+            'delay': 'low',
+            'smoke': 'medium',
+            'accident': 'high',
+            'lost_contact': 'medium',
+        }
+        sev = mapping.get(t, 'medium')
+
     item = Incident(
+        delivery_request_id=req.delivery_request_id,
         route_id=req.route_id,
         route_stop_id=req.route_stop_id,
         vehicle_id=req.vehicle_id,
         driver_id=req.driver_id,
-        severity=req.severity,
+        severity=sev,
         type=req.type,
         description=req.description,
     )
@@ -305,6 +331,7 @@ def list_incidents(
     route_stop_id: Optional[int] = None,
     vehicle_id: Optional[int] = None,
     driver_id: Optional[int] = None,
+    delivery_request_id: Optional[int] = None,
     severity: Optional[str] = None,
     type: Optional[str] = None,
     created_from: Optional[datetime] = None,
@@ -315,6 +342,8 @@ def list_incidents(
     db: Session = Depends(get_db)
 ):
     q = db.query(Incident)
+    if delivery_request_id is not None:
+        q = q.filter(Incident.delivery_request_id == delivery_request_id)
     if route_id is not None:
         q = q.filter(Incident.route_id == route_id)
     if route_stop_id is not None:

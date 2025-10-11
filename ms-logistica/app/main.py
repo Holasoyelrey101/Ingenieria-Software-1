@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .routes import router as maps_router
 import structlog
@@ -12,6 +13,15 @@ log = structlog.get_logger()
 
 app = FastAPI(title="ms-logistica")
 app.include_router(maps_router, prefix="/maps", tags=["maps"])
+
+# CORS for local development (Vite dev server)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Global exception handler for dev visibility
