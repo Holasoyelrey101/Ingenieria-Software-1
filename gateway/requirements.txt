@@ -8,4 +8,5 @@ python-dotenv
 structlog
 sqlalchemy
 psycopg2-binary
+prometheus-client
 python-multipart

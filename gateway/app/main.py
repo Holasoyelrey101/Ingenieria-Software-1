@@ -1,34 +1,31 @@
 from fastapi import FastAPI, Depends, HTTPException, Security, Request
 from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
-from .auth import create_access_token, decode_token, verify_password, generate_totp, verify_totp
-import httpx
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
+import httpx  # type: ignore[reportMissingImports]
 import os
 import json
-from sqlalchemy.orm import Session
-from .db import SessionLocal, engine
-from . import models
 import traceback
 import logging
-import os
+from sqlalchemy.orm import Session
+from .auth import (
+    create_access_token,
+    decode_token,
+    verify_password,
+    generate_totp,
+    verify_totp,
+)
+from .db import SessionLocal, engine
+from . import models
 
-app = FastAPI(title="gateway")
+# ------------------------------------------------------
+# CONFIGURACIÓN INICIAL
+# ------------------------------------------------------
 
+app = FastAPI(title="Gateway LuxChile ERP")
 
-# Global exception handler (prints trace in DEV)
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    tb = traceback.format_exc()
-    # log to stderr for visibility in consoles / systemd logs
-    logging.error("Unhandled exception: %s", str(exc))
-    logging.error(tb)
-    # expose trace only when DEV=1 (safe for local debugging)
-    show_trace = os.environ.get("DEV", "1") == "1"
-    return JSONResponse(status_code=500, content={"detail": "internal_server_error", "error": str(exc), "trace": tb if show_trace else None})
-
-# CORS - allow frontend dev origin
+# Configuración de CORS (para entorno local/frontend Vite)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -37,20 +34,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Optional Prometheus metrics (graceful if library not installed)
-try:
-    from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore
-    METRICS_ENABLED = True
-    REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
-except Exception:
-    METRICS_ENABLED = False
-    class _DummyCounter:
-        def inc(self):
-            pass
-    REQUESTS = _DummyCounter()
+# Métricas Prometheus
+REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
 
 security = HTTPBearer()
 
+# ------------------------------------------------------
+# MANEJO GLOBAL DE ERRORES
+# ------------------------------------------------------
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    logging.error("Unhandled exception: %s", str(exc))
+    logging.error(tb)
+    show_trace = os.environ.get("DEV", "1") == "1"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "internal_server_error",
+            "error": str(exc),
+            "trace": tb if show_trace else None,
+        },
+    )
+
+# ------------------------------------------------------
+# AUTENTICACIÓN Y SEGURIDAD
+# ------------------------------------------------------
 
 def get_current_user(token: HTTPAuthorizationCredentials = Security(security)):
     try:
@@ -71,7 +81,7 @@ def rbac(required_roles: list):
 
 @app.post("/auth/token")
 async def token(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Dummy example: in a real app lookup user from DB
+    # Ejemplo simple; en producción se valida contra la base de datos
     if form_data.username == "admin" and form_data.password == "admin":
         token = create_access_token(subject=form_data.username, extra={"roles": ["admin"]})
         return {"access_token": token, "token_type": "bearer"}
@@ -80,19 +90,20 @@ async def token(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/auth/totp/setup")
 async def totp_setup(user=Depends(get_current_user)):
-    data = generate_totp()
-    return data
+    return generate_totp()
 
 
 @app.post("/auth/totp/verify")
 async def totp_verify(code: str, user=Depends(get_current_user)):
-    # user should have secret stored; this is a stub
     secret = user.get("totp_secret")
     if not secret:
         raise HTTPException(status_code=400, detail="no totp configured")
     ok = verify_totp(secret, code)
     return {"ok": ok}
 
+# ------------------------------------------------------
+# MÉTRICAS Y SALUD DEL SERVICIO
+# ------------------------------------------------------
 
 @app.get("/health")
 async def health():
@@ -102,18 +113,16 @@ async def health():
 
 @app.get("/metrics")
 async def metrics():
-    if not METRICS_ENABLED:
-        return Response(status_code=204)
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 
+# ------------------------------------------------------
+# BASE DE DATOS
+# ------------------------------------------------------
 
-# Create tables in dev (simple approach). Wrap in try/except so server still
-# starts even if the DB is not reachable or has encoding issues on Windows.
 try:
     models.Base.metadata.create_all(bind=engine)
 except Exception as e:
-    # Log and continue; DB may not be available in dev environment.
     logging.error("Could not create DB tables at startup: %s", str(e))
     logging.debug("DB create_all exception", exc_info=True)
 
@@ -125,18 +134,18 @@ def get_db():
     finally:
         db.close()
 
+# ------------------------------------------------------
+# PROXIES HACIA MS-LOGISTICA
+# ------------------------------------------------------
 
 @app.post("/maps/geocode")
 async def maps_geocode(payload: dict):
-    # Forward to ms-logistica (internal service). In dev default to localhost:18001
+    """Redirige solicitudes de geocodificación al microservicio de logística"""
     ms_url = os.environ.get("MS_LOGISTICA_URL", "http://127.0.0.1:18001/maps/geocode")
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(ms_url, json=payload, timeout=20)
-        try:
-            content = r.json()
-        except Exception:
-            content = {"raw_text": r.text}
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
         return JSONResponse(status_code=r.status_code, content=content)
     except httpx.RequestError as e:
         logging.error("ms-logistica geocode request failed: %s", str(e))
@@ -148,14 +157,14 @@ async def maps_geocode(payload: dict):
 
 @app.post("/maps/directions")
 async def maps_directions(payload: dict, request: Request, db: Session = Depends(get_db)):
-    # Default ms-logistica on 18001 for this dev setup
+    """Redirige solicitudes de direcciones (rutas) al microservicio de logística"""
     ms_url = os.environ.get("MS_LOGISTICA_URL", "http://127.0.0.1:18001/maps/directions")
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(ms_url, json=payload, timeout=30)
     except httpx.RequestError as e:
         logging.error("ms-logistica directions request failed: %s", str(e))
-        # Persist a failed route request (best-effort) with error info
+        # Registro local del fallo (best effort)
         try:
             rr = models.RouteRequest(
                 origin=json.dumps(payload.get("origin"), ensure_ascii=False),
@@ -169,19 +178,17 @@ async def maps_directions(payload: dict, request: Request, db: Session = Depends
         except Exception:
             logging.debug("Failed to persist failed route request", exc_info=True)
         return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+
     except Exception as e:
         logging.exception("Unexpected error contacting ms-logistica directions")
         return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
 
+    # Procesar respuesta
     body_text = r.text
-    try:
-        origin = payload.get("origin")
-        destination = payload.get("destination")
-    except Exception:
-        origin = None
-        destination = None
+    origin = payload.get("origin")
+    destination = payload.get("destination")
 
-    # Persist request + response for auditing (best-effort)
+    # Persistir la solicitud (best-effort)
     try:
         rr = models.RouteRequest(
             origin=origin,
@@ -202,8 +209,11 @@ async def maps_directions(payload: dict, request: Request, db: Session = Depends
         content = {"raw_text": body_text}
     return JSONResponse(status_code=r.status_code, content=content)
 
+# ------------------------------------------------------
+# ADMINISTRACIÓN DE RUTAS REGISTRADAS
+# ------------------------------------------------------
 
-@app.get('/admin/route-requests')
+@app.get("/admin/route-requests")
 def list_route_requests(limit: int = 100, db: Session = Depends(get_db)):
     items = db.query(models.RouteRequest).order_by(models.RouteRequest.created_at.desc()).limit(limit).all()
     return [
@@ -212,17 +222,17 @@ def list_route_requests(limit: int = 100, db: Session = Depends(get_db)):
             "origin": i.origin,
             "destination": i.destination,
             "status": i.status,
-            "created_at": i.created_at.isoformat() if i.created_at else None,
+            "created_at": (lambda dt: dt.isoformat() if dt is not None else None)(getattr(i, "created_at", None)),
         }
         for i in items
     ]
 
 
-@app.get('/admin/route-requests/{request_id}')
+@app.get("/admin/route-requests/{request_id}")
 def get_route_request(request_id: int, db: Session = Depends(get_db)):
     item = db.query(models.RouteRequest).filter(models.RouteRequest.id == request_id).first()
     if not item:
-        raise HTTPException(status_code=404, detail='not found')
+        raise HTTPException(status_code=404, detail="not found")
     return {
         "id": item.id,
         "origin": item.origin,
@@ -230,13 +240,16 @@ def get_route_request(request_id: int, db: Session = Depends(get_db)):
         "payload": item.payload,
         "response": item.response,
         "status": item.status,
-        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "created_at": (lambda dt: dt.isoformat() if dt is not None else None)(getattr(item, "created_at", None)),
     }
 
-# Import optional reports module (HU11)
+# ------------------------------------------------------
+# IMPORTACIÓN DE RUTAS ADICIONALES (HU11, HU12, ETC.)
+# ------------------------------------------------------
+
 try:
-    from . import reportes
+    from . import reportes  # HU11 y HU12
     app.include_router(reportes.router)
-    logging.info("Reportes consolidados (HU11) habilitado")
-except Exception as e:
-    logging.warning(f"Reportes (HU11) no disponible: {e}")
+    logging.info("✅ Módulo de reportes (HU11/HU12) cargado correctamente.")
+except ImportError as e:
+    logging.warning(f"No se pudo importar el módulo de reportes: {e}")

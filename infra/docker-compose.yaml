@@ -10,9 +10,7 @@ services:
       LC_ALL: en_US.UTF-8
       PGCLIENTENCODING: UTF8
     ports: ["5432:5432"]
-    volumes:
-      - db:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d:ro
+    volumes: [db:/var/lib/postgresql/data]
 
   pgadmin:
     image: dpage/pgadmin4
@@ -28,9 +26,9 @@ services:
     depends_on: [postgres]
     ports: ["8000:8000"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://lux:luxpass@postgres:5432/erp}
-      MS_LOGISTICA_URL: ${MS_LOGISTICA_URL:-http://ms-logistica:8000}
-      MS_INVENTARIO_URL: ${MS_INVENTARIO_URL:-http://ms-inventario:8000}
+      DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
+      MS_LOGISTICA_URL: "http://ms-logistica:8000"
+      MS_INVENTARIO_URL: "http://ms-inventario:8000"
     healthcheck:
       test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
       interval: 30s

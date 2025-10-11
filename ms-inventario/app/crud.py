@@ -1,4 +1,5 @@
 from sqlalchemy import select, func
+from typing import Optional
 from app.models import Producto, Stock, Movimiento, Alerta, UmbralStock
 from sqlalchemy.orm import Session
 
@@ -30,7 +31,7 @@ def get_stock_with_product_by_bodega(db: Session, bodega_id: int):
 def upsert_stock(db: Session, producto_id:int, bodega_id:int, cantidad:int):
     existing = db.execute(select(Stock).where(Stock.producto_id==producto_id, Stock.bodega_id==bodega_id)).scalars().first()
     if existing:
-        existing.cantidad = existing.cantidad + cantidad
+        existing.cantidad = existing.cantidad + cantidad  # type: ignore[operator]
         db.add(existing)
         db.commit()
         db.refresh(existing)
@@ -42,7 +43,7 @@ def upsert_stock(db: Session, producto_id:int, bodega_id:int, cantidad:int):
         db.refresh(new)
         return new
 
-def insert_movimiento(db: Session, producto_id:int, origen_id:int, destino_id:int, cantidad:int):
+def insert_movimiento(db: Session, producto_id:int, origen_id: Optional[int], destino_id: Optional[int], cantidad:int):
     m = Movimiento(producto_id=producto_id, origen_id=origen_id, destino_id=destino_id, cantidad=cantidad)
     db.add(m)
     db.commit()
@@ -57,7 +58,7 @@ def check_and_create_alert(db: Session, producto_id:int, bodega_id:int):
     if threshold:
         stock = db.execute(select(Stock).where(Stock.producto_id==producto_id, Stock.bodega_id==bodega_id)).scalars().first()
         current = stock.cantidad if stock else 0
-        if current < threshold.minimo:
+        if current < threshold.minimo:  # type: ignore[operator]
             a = Alerta(producto_id=producto_id, bodega_id=bodega_id, tipo='STOCK_LOW', mensaje=f'Stock bajo: {current} < {threshold.minimo}')
             db.add(a)
             db.commit()

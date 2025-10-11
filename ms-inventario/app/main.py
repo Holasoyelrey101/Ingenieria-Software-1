@@ -17,8 +17,7 @@ app.add_middleware(
 def health():
     return {'status':'ok'}
 
-# Rutas del microservicio
 app.include_router(inventario.router, prefix="", tags=["inventario"]) 
 app.include_router(movimientos.router, prefix="", tags=["movimientos"]) 
 app.include_router(alerts.router, prefix="", tags=["alerts"]) 
-app.include_router(export.router, prefix="/export", tags=["export"])  # exports para reportes de inventario
+app.include_router(export.router, prefix="/export", tags=["export"])  # HU12

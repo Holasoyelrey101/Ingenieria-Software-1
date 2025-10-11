@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .routes import router as maps_router
-import structlog
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+import structlog  # type: ignore[reportMissingImports]
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
 from fastapi.responses import Response
 from .logging_config import configure_logging
 
