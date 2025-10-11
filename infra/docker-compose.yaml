@@ -66,6 +66,7 @@ services:
       # Permite sobreescribir desde entorno host si se desea
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
       VITE_API_INVENTARIO: ${VITE_API_INVENTARIO:-http://localhost:8002}
+      VITE_API_LOGISTICA: ${VITE_API_LOGISTICA:-http://localhost:8001}
       VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     ports: ["5173:80"]
     depends_on: [gateway]

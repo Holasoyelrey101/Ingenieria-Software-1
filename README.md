@@ -97,6 +97,7 @@ Para inspeccionar DB: opcionalmente levantar `pgadmin` (puerto 5050) y conectar 
 - Vite + React + TypeScript.
 - Variables `.env` (en `web/.env`):
   - `VITE_API_URL` (Gateway)
+	- `VITE_API_LOGISTICA` (Logística directo)
   - `VITE_API_INVENTARIO` (Inventario directo)
   - `VITE_GOOGLE_MAPS_API_KEY`
 - Componentes clave: `MapView`, `InventoryPage`, `AlertsPage`, `PlaceAutocomplete`.
