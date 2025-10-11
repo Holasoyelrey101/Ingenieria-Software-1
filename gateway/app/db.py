@@ -5,13 +5,24 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Cargar variables de entorno desde config.env en la raíz del repo si existe
-env_path = Path(__file__).resolve().parents[3] / 'config.env'
-if not env_path.exists():
-	# fallback a gateway/config.env si está presente
-	env_path = Path(__file__).resolve().parents[1] / 'config.env'
-if env_path.exists():
-	load_dotenv(dotenv_path=env_path)
+"""
+Opcional: cargar variables desde un config.env si existe. No asumir una
+profundidad fija del path para evitar IndexError en contenedores.
+"""
+try:
+	root_candidate = Path(__file__).resolve()
+	# Probar algunos niveles hacia arriba sin fallar
+	candidates = [
+		root_candidate.parent.parent.parent / 'config.env',  # ~ repo root
+		root_candidate.parent.parent / 'config.env',         # gateway-level
+	]
+	for p in candidates:
+		if p.exists():
+			load_dotenv(dotenv_path=p)
+			break
+except Exception:
+	# Silencioso: variables pueden venir vía entorno
+	pass
 
 # Prefer DB_* variables (coherente con DatabaseConfig)
 DB_HOST = os.environ.get('DB_HOST', 'localhost')

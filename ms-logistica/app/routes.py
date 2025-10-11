@@ -239,6 +239,18 @@ def list_delivery_requests(limit: int = 100, db: Session = Depends(get_db)):
     return items
 
 
+@router.get('/delivery_requests/count')
+def count_delivery_requests(created_from: Optional[datetime] = None, created_to: Optional[datetime] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
+    q = db.query(DeliveryRequest)
+    if created_from is not None:
+        q = q.filter(DeliveryRequest.created_at >= created_from)
+    if created_to is not None:
+        q = q.filter(DeliveryRequest.created_at <= created_to)
+    if status:
+        q = q.filter(DeliveryRequest.status == status)
+    return {"count": q.count()}
+
+
 # Incidents endpoints (HU5)
 
 class IncidentCreate(BaseModel):

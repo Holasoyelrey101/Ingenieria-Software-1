@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
 from app.db import get_db
 from sqlalchemy.orm import Session
 from app import crud, schemas
+from app.models import Movimiento
 
 router = APIRouter()
 
@@ -17,3 +19,22 @@ def post_movement(payload: schemas.MovementIn, db: Session = Depends(get_db)):
     # evaluate threshold and create alert if needed
     alert = crud.check_and_create_alert(db, payload.producto_id, payload.bodega_id)
     return {'ok': True, 'stock': stock.cantidad, 'alert': alert.id if alert else None}
+
+
+@router.get('/movements/count')
+def count_movements(desde: str | None = None, hasta: str | None = None, db: Session = Depends(get_db)):
+    """Devuelve la cantidad de movimientos en un rango de fechas (fecha)."""
+    q = db.query(Movimiento)
+    def parse_dt(s: str):
+        try:
+            # aceptar YYYY-MM-DD
+            return datetime.fromisoformat(s) if len(s) > 10 else datetime.fromisoformat(s + 'T00:00:00')
+        except Exception:
+            return None
+    dts = parse_dt(desde) if desde else None
+    dte = parse_dt(hasta) if hasta else None
+    if dts:
+        q = q.filter(Movimiento.fecha >= dts)
+    if dte:
+        q = q.filter(Movimiento.fecha <= dte)
+    return {"count": q.count()}
