@@ -297,3 +297,53 @@ def create_incident(req: IncidentCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.get('/incidents', response_model=List[IncidentOut])
+def list_incidents(
+    route_id: Optional[int] = None,
+    route_stop_id: Optional[int] = None,
+    vehicle_id: Optional[int] = None,
+    driver_id: Optional[int] = None,
+    severity: Optional[str] = None,
+    type: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
+    limit: int = 100,
+    offset: int = 0,
+    order: str = 'desc',
+    db: Session = Depends(get_db)
+):
+    q = db.query(Incident)
+    if route_id is not None:
+        q = q.filter(Incident.route_id == route_id)
+    if route_stop_id is not None:
+        q = q.filter(Incident.route_stop_id == route_stop_id)
+    if vehicle_id is not None:
+        q = q.filter(Incident.vehicle_id == vehicle_id)
+    if driver_id is not None:
+        q = q.filter(Incident.driver_id == driver_id)
+    if severity is not None:
+        q = q.filter(Incident.severity == severity)
+    if type is not None:
+        q = q.filter(Incident.type == type)
+    if created_from is not None:
+        q = q.filter(Incident.created_at >= created_from)
+    if created_to is not None:
+        q = q.filter(Incident.created_at <= created_to)
+
+    if order.lower() == 'asc':
+        q = q.order_by(Incident.created_at.asc())
+    else:
+        q = q.order_by(Incident.created_at.desc())
+
+    items = q.offset(max(offset, 0)).limit(max(min(limit, 1000), 1)).all()
+    return items
+
+
+@router.get('/incidents/{incident_id}', response_model=IncidentOut)
+def get_incident(incident_id: int, db: Session = Depends(get_db)):
+    item = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail={"error": "incident_not_found"})
+    return item
