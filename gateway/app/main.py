@@ -2,7 +2,6 @@ from fastapi import FastAPI, Depends, HTTPException, Security, Request
 from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 from .auth import create_access_token, decode_token, verify_password, generate_totp, verify_totp
 import httpx
@@ -38,7 +37,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
+# Optional Prometheus metrics (graceful if library not installed)
+try:
+    from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore
+    METRICS_ENABLED = True
+    REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
+except Exception:
+    METRICS_ENABLED = False
+    class _DummyCounter:
+        def inc(self):
+            pass
+    REQUESTS = _DummyCounter()
 
 security = HTTPBearer()
 
@@ -93,6 +102,8 @@ async def health():
 
 @app.get("/metrics")
 async def metrics():
+    if not METRICS_ENABLED:
+        return Response(status_code=204)
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 

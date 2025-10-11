@@ -28,6 +28,7 @@ services:
     depends_on: [postgres]
     ports: ["8000:8000"]
     environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://lux:luxpass@postgres:5432/erp}
       MS_LOGISTICA_URL: ${MS_LOGISTICA_URL:-http://ms-logistica:8000}
       MS_INVENTARIO_URL: ${MS_INVENTARIO_URL:-http://ms-inventario:8000}
     healthcheck:
