@@ -38,6 +38,10 @@ Sistema modular orientado a microservicios para la gestión de inventario, logí
 
 Para reconstruir después de cambios en código backend/frontend: `docker compose up -d --build <servicio>`.
 
+Notas BD:
+- Los scripts de `infra/sql` se ejecutan automáticamente la primera vez que se crea el volumen de Postgres (montados en `/docker-entrypoint-initdb.d`).
+- Si necesitas reinicializar la base desde cero para re-ejecutar los `.sql`: `docker compose down -v` y luego `docker compose up -d postgres`.
+
 ---
 ## 🧱 Microservicios Principales
 
