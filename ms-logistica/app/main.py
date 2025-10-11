@@ -49,7 +49,14 @@ async def root():
     return {
         "service": "ms-logistica",
         "status": "running",
-        "endpoints": ["/health", "/metrics", "/maps/geocode", "/maps/directions"]
+        "endpoints": [
+            "/health",
+            "/metrics",
+            "/maps/geocode",
+            "/maps/directions",
+            "/maps/delivery_requests",
+            "/maps/incidents",
+        ]
     }
 
 
