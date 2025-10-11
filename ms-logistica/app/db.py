@@ -38,3 +38,11 @@ except Exception:
     fallback = os.getenv('FALLBACK_SQLITE', 'sqlite:///./dev_ms_logistica.db')
     engine = _create_engine(fallback)
     SessionLocal = sessionmaker(bind=engine, autoflush=False)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

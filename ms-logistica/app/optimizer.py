@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 def haversine(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     from math import radians, sin, cos, asin, sqrt
@@ -11,7 +11,7 @@ def haversine(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     x = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
     return 2 * 6371000 * asin(sqrt(x))
 
-def nearest_neighbor(points: List[Tuple[float,float]]) -> List[int]:
+def nearest_neighbor_points(points: List[Tuple[float,float]]) -> List[int]:
     if not points:
         return []
     n = len(points)
@@ -55,6 +55,14 @@ def two_opt(points: List[Tuple[float,float]], tour: List[int]) -> List[int]:
 def optimize_route(points: List[Tuple[float,float]]) -> List[int]:
     if not points:
         return []
-    tour = nearest_neighbor(points)
+    tour = nearest_neighbor_points(points)
     tour = two_opt(points, tour)
     return tour
+
+def nearest_neighbor(orders: List[Dict]) -> List[Dict]:
+    """
+    orders: [{"id": 1, "lat": ..., "lon": ...}, ...]
+    Devuelve [{"id": ?, "sequence": 1}, ...]
+    (Por ahora devuelve el mismo orden; reemplaza por NN/2-opt cuando quieras)
+    """
+    return [{"id": o["id"], "sequence": i} for i, o in enumerate(orders, start=1)]

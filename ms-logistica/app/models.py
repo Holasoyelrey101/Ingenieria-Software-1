@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Float, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from .db import Base
 
 
@@ -29,3 +30,23 @@ class Incident(Base):
     type = Column(String(64), nullable=True)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ====== NUEVOS MODELOS PARA RUTAS ======
+class Route(Base):
+    __tablename__ = "routes"
+    id = Column(Integer, primary_key=True, index=True)
+    # Match existing DB schema columns
+    distance_m = Column(Integer, nullable=True)   # meters
+    duration_s = Column(Integer, nullable=True)   # seconds
+    stops = relationship("RouteStop", back_populates="route", cascade="all, delete-orphan")
+
+
+class RouteStop(Base):
+    __tablename__ = "route_stops"
+    id = Column(Integer, primary_key=True, index=True)
+    route_id = Column(Integer, ForeignKey("routes.id", ondelete="CASCADE"))
+    seq = Column(Integer)
+    location = Column(JSON)  # {lat, lng}
+
+    route = relationship("Route", back_populates="stops")

@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Routers
 from .routes import router as maps_router
+from .routes_routes import router as routes_router
+
 import structlog  # type: ignore[reportMissingImports]
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
 from fastapi.responses import Response
@@ -12,12 +16,14 @@ configure_logging()
 log = structlog.get_logger()
 
 app = FastAPI(title="ms-logistica")
-app.include_router(maps_router, prefix="/maps", tags=["maps"])
 
-# CORS for local development (Vite dev server)
+# Prefijos
+app.include_router(maps_router, prefix="/maps", tags=["maps"])
+app.include_router(routes_router, prefix="/routes", tags=["routes"])
+
+# CORS para desarrollo local (Vite)
 app.add_middleware(
     CORSMiddleware,
-    # Allow localhost and common LAN IPs for Vite dev server (port 5173)
     allow_origins=["http://localhost:5173"],
     allow_origin_regex=r"https?://(localhost|127\\.0\\.1|192\\.168\\.[0-9]+\\.[0-9]+|10\\.[0-9]+\\.[0-9]+\\.[0-9]+|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]+\\.[0-9]+):5173",
     allow_credentials=True,
@@ -66,8 +72,8 @@ async def root():
             "/metrics",
             "/maps/geocode",
             "/maps/directions",
-            "/maps/delivery_requests",
-            "/maps/incidents",
+            "/routes/optimize",
+            "/routes/{id}"
         ]
     }
 

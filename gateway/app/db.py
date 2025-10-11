@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # Cargar variables de entorno desde un posible config.env sin asumir profundidad fija
 try:
 	p = Path(__file__).resolve()
-	# Walk up to 5 levels to find a config.env
+	# Buscar hasta 5 niveles hacia arriba un archivo config.env
 	env_path = None
 	for _ in range(5):
 		candidate = p.parent / 'config.env'

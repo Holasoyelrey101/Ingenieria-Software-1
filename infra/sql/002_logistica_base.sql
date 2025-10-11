@@ -19,6 +19,19 @@ CREATE TABLE IF NOT EXISTS drivers (
     active BOOLEAN DEFAULT TRUE
 );
 
+-- Solicitudes de entrega (si no existe aún en inventario/ms-logistica)
+CREATE TABLE IF NOT EXISTS delivery_requests (
+    id SERIAL PRIMARY KEY,
+    origin JSONB,
+    destination JSONB,
+    vehicle_id VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'pending',
+    eta INTEGER,
+    payload JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Rutas planificadas/ejecutadas
 CREATE TABLE IF NOT EXISTS routes (
     id SERIAL PRIMARY KEY,
