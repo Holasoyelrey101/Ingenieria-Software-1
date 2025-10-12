@@ -6,6 +6,8 @@ import httpx  # type: ignore[reportMissingImports]
 from .optimizer import optimize_route
 from .optimizer import haversine
 import logging
+import re
+import unicodedata
 from typing import List, Optional
 from pydantic import Field
 from fastapi import Depends
@@ -38,7 +40,7 @@ def encode_polyline(coords):
 
 router = APIRouter()
 
-GOOGLE_KEY = os.environ.get("GOOGLE_MAPS_SERVER_KEY") or ""
+GOOGLE_KEY = os.environ.get("GOOGLE_MAPS_SERVER_KEY") or os.environ.get("VITE_GOOGLE_MAPS_API_KEY") or ""
 logger = logging.getLogger("ms-logistica.routes")
 
 
@@ -75,23 +77,77 @@ async def geocode(req: AddressRequest):
         except Exception:
             logger.exception("Google geocode request exception; falling back to Nominatim")
 
-    # Nominatim fallback (OpenStreetMap)
+    # Nominatim fallback (OpenStreetMap) with resilient retries/variants
     try:
         nom_url = "https://nominatim.openstreetmap.org/search"
-        params = {"q": req.address, "format": "json", "limit": 5}
-        async with httpx.AsyncClient(headers={"User-Agent": "lux-logistica/1.0 (dev)"}) as client:
-            r = await client.get(nom_url, params=params, timeout=15)
-            try:
-                data = r.json()
-            except Exception:
-                logging.warning("Nominatim returned non-json response")
-                data = None
+
+        def build_variants(addr: str):
+            variants = []
+            base = addr.strip()
+            variants.append(base)
+            # Append country if missing
+            if "chile" not in base.lower():
+                variants.append(f"{base}, Chile")
+            # Remove common punctuation/symbols (#, N°, etc.)
+            cleaned = re.sub(r"[#°º]", " ", base)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            if cleaned != base:
+                variants.append(cleaned)
+                if "chile" not in cleaned.lower():
+                    variants.append(f"{cleaned}, Chile")
+            # ASCII-normalized (remove accents)
+            ascii_norm = unicodedata.normalize('NFKD', base).encode('ascii', 'ignore').decode('ascii')
+            ascii_norm = re.sub(r"\s+", " ", ascii_norm).strip()
+            if ascii_norm and ascii_norm.lower() != base.lower():
+                variants.append(ascii_norm)
+                if "chile" not in ascii_norm.lower():
+                    variants.append(f"{ascii_norm}, Chile")
+            # Deduplicate while preserving order
+            seen = set()
+            uniq = []
+            for v in variants:
+                if v not in seen:
+                    seen.add(v)
+                    uniq.append(v)
+            return uniq
+
+        async def try_query(q: str):
+            params = {"q": q, "format": "json", "limit": 5, "addressdetails": 1}
+            headers = {"User-Agent": "lux-logistica/1.0 (dev)", "Accept-Language": "es-CL,es;q=0.9,en;q=0.8"}
+            async with httpx.AsyncClient(headers=headers) as client:
+                r = await client.get(nom_url, params=params, timeout=15)
+                try:
+                    return r.json()
+                except Exception:
+                    logging.warning("Nominatim returned non-json response for query=%s", q)
+                    return None
+
+        variants = build_variants(req.address or "")
+        data = None
+        tried = []
+        for q in variants:
+            tried.append(q)
+            data = await try_query(q)
+            if data:
+                break
+
         if not data:
-            raise HTTPException(status_code=404, detail={"error": "not_found", "provider": "nominatim"})
+            logger.info("Nominatim no results", extra={"address": req.address, "tried": tried})
+            raise HTTPException(status_code=404, detail={"error": "not_found", "provider": "nominatim", "tried": tried})
+
         # return array of suggestions
         suggestions = []
         for item in data:
-            suggestions.append({"lat": float(item.get("lat")), "lng": float(item.get("lon")), "display_name": item.get("display_name")})
+            try:
+                suggestions.append({
+                    "lat": float(item.get("lat")),
+                    "lng": float(item.get("lon")),
+                    "display_name": item.get("display_name")
+                })
+            except Exception:
+                continue
+        if not suggestions:
+            raise HTTPException(status_code=404, detail={"error": "not_found", "provider": "nominatim", "tried": tried})
         return suggestions
     except HTTPException:
         raise
@@ -104,29 +160,36 @@ async def geocode(req: AddressRequest):
 async def directions(req: DirectionsRequest):
     # If Google not configured, fall back to a local route generator (dev mode)
     if not GOOGLE_KEY:
-        # build coords from origin, waypoints, destination
+        # DEV fallback improved: try OSRM (open-source routing) to follow actual roads.
+        # If OSRM is unreachable or fails, we revert to straight-line estimation.
+        # Build coords from origin, waypoints, destination
         pts = []
         def push_point(v):
-            if v is None: return
+            if v is None:
+                return
             if isinstance(v, dict):
-                if v.get('lat') is not None:
-                    pts.append((v.get('lat'), v.get('lng')))
-            elif isinstance(v, (list, tuple)):
-                pts.append((v[0], v[1]))
+                lat_v = v.get('lat')
+                lng_v = v.get('lng')
+                if lat_v is not None and lng_v is not None:
+                    try:
+                        pts.append((float(lat_v), float(lng_v)))
+                    except Exception:
+                        pass
+            elif isinstance(v, (list, tuple)) and len(v) >= 2:
+                pts.append((float(v[0]), float(v[1])))
 
         push_point(req.origin)
-        for w in req.waypoints:
+        for w in req.waypoints or []:
             push_point(w)
         push_point(req.destination)
 
-        # compute simple optimized order for waypoints (keep origin/dest as endpoints)
+        # Optional: optimize waypoint order locally (keep endpoints)
         mid = pts[1:-1] if len(pts) > 2 else []
-        optimized_idx = []
-        if mid:
+        if mid and req.optimize:
             order = optimize_route(mid)
             ordered = [mid[i] for i in order]
         else:
-            ordered = []
+            ordered = mid
 
         route_points = []
         if pts:
@@ -135,19 +198,39 @@ async def directions(req: DirectionsRequest):
             if len(pts) > 1:
                 route_points.append(pts[-1])
 
-        # distance & duration estimation (simple sum of haversine, assume 40 km/h)
+        # Try OSRM public demo server (best-effort, rate-limited)
+        try:
+            if len(route_points) >= 2:
+                # OSRM expects lon,lat order
+                coords = ";".join([f"{lng},{lat}" for (lat, lng) in route_points])
+                osrm_url = f"https://router.project-osrm.org/route/v1/driving/{coords}"
+                params = {"overview": "full", "geometries": "polyline"}
+                async with httpx.AsyncClient() as client:
+                    r = await client.get(osrm_url, params=params, timeout=20)
+                    data = r.json()
+                if data.get("code") == "Ok" and data.get("routes"):
+                    r0 = data["routes"][0]
+                    polyline = r0.get("geometry")
+                    distance = int(r0.get("distance", 0))
+                    duration = int(r0.get("duration", 0))
+                    return {"polyline": polyline, "distance_m": distance, "duration_s": duration, "optimized_waypoints": None, "raw": {"provider": "osrm"}}
+        except Exception:
+            logger.debug("OSRM fallback failed; reverting to straight-line", exc_info=True)
+
+        # Last-resort: straight-line estimation between points
         total_m = 0
-        for i in range(len(route_points)-1):
-            total_m += haversine(route_points[i], route_points[i+1])
+        for i in range(len(route_points) - 1):
+            total_m += haversine(route_points[i], route_points[i + 1])
         avg_speed_m_s = 11.11  # ~40 km/h
         est_duration = int(total_m / avg_speed_m_s) if total_m > 0 else 0
         poly = encode_polyline(route_points)
-        return {"polyline": poly, "distance_m": int(total_m), "duration_s": est_duration, "optimized_waypoints": None, "raw": {"note": "dev-fallback"}}
+        return {"polyline": poly, "distance_m": int(total_m), "duration_s": est_duration, "optimized_waypoints": None, "raw": {"note": "dev-fallback-straight"}}
     # Otherwise call Google Directions API
     params = {
         "origin": f"{req.origin.get('lat')},{req.origin.get('lng')}" if req.origin.get('lat') else req.origin.get('address'),
         "destination": f"{req.destination.get('lat')},{req.destination.get('lng')}" if req.destination.get('lat') else req.destination.get('address'),
         "key": GOOGLE_KEY,
+        "region": "cl",
     }
     if req.waypoints:
         way = []
@@ -186,7 +269,7 @@ async def directions(req: DirectionsRequest):
     else:
         optimized = None
 
-    return {"polyline": polyline, "distance_m": distance, "duration_s": duration, "optimized_waypoints": optimized, "raw": data}
+    return {"polyline": polyline, "distance_m": distance, "duration_s": duration, "optimized_waypoints": optimized, "raw": data, "provider": "google"}
 
 
 # Delivery request endpoints (persist requests about vehicles en-route)

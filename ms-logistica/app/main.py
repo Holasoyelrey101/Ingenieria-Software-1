@@ -2,10 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .routes import router as maps_router
+from .routes_routes import router as routes_router
 import structlog  # type: ignore[reportMissingImports]
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
 from fastapi.responses import Response
 from .logging_config import configure_logging
+from .db import engine
+from .models import Base
 
 configure_logging()
 
@@ -13,6 +16,14 @@ log = structlog.get_logger()
 
 app = FastAPI(title="ms-logistica")
 app.include_router(maps_router, prefix="/maps", tags=["maps"])
+app.include_router(routes_router, prefix="/routes", tags=["routes"])
+
+# For dev/MVP, ensure tables exist
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception:
+    # best-effort; log will be handled by global exception handler if needed
+    pass
 
 # CORS for local development (Vite dev server)
 app.add_middleware(

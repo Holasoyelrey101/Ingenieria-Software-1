@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react'
-import { GoogleMap, LoadScript, Marker, Polyline, Libraries } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, Marker, Polyline, Libraries } from '@react-google-maps/api'
 import PlaceAutocomplete from './components/PlaceAutocomplete'
 import axios from 'axios'
 
@@ -8,11 +8,6 @@ import axios from 'axios'
 
 // Configuración de Google Maps
 const libraries: Libraries = ['places']
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-if (!GOOGLE_MAPS_API_KEY) {
-  console.error('Google Maps API Key no encontrada. Por favor configura VITE_GOOGLE_MAPS_API_KEY en tu archivo .env')
-  throw new Error('Google Maps API Key es requerida')
-}
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const containerStyle = {
@@ -75,6 +70,16 @@ function decodePolyline(encoded: string) {
 }
 
 export default function MapView() {
+  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.error('Google Maps API Key no encontrada. Por favor configura VITE_GOOGLE_MAPS_API_KEY en tu archivo .env')
+    throw new Error('Google Maps API Key es requerida')
+  }
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY as string,
+    libraries
+  })
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null)
@@ -109,6 +114,11 @@ export default function MapView() {
         formatted_address: place.formatted_address,
         location
       });
+      // Recenter map to selected origin
+      if (map) {
+        map.panTo(location as google.maps.LatLngLiteral);
+        map.setZoom(14);
+      }
     }
   }
 
@@ -123,6 +133,11 @@ export default function MapView() {
         formatted_address: place.formatted_address,
         location
       });
+      // Recenter map to selected destination
+      if (map) {
+        map.panTo(location as google.maps.LatLngLiteral);
+        map.setZoom(14);
+      }
     }
   }
 
@@ -150,9 +165,17 @@ export default function MapView() {
       .filter(line => line.length > 0)
 
     const payload = {
-      origin: originPlace.formatted_address,
-      destination: destPlace.formatted_address,
-      waypoints,
+      origin: {
+        address: originPlace.formatted_address,
+        lat: originPlace.location?.lat,
+        lng: originPlace.location?.lng
+      },
+      destination: {
+        address: destPlace.formatted_address,
+        lat: destPlace.location?.lat,
+        lng: destPlace.location?.lng
+      },
+      waypoints: waypoints.map(address => ({ address })),
       vehicleId: selectedVehicle,
       optimize: true
     }
@@ -202,6 +225,14 @@ export default function MapView() {
     }
   }
 
+  if (loadError) {
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ color: 'red' }}>Error cargando Google Maps: {String(loadError)}</div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       <div style={{ width: 360, padding: 12, boxSizing: 'border-box' }}>
@@ -209,6 +240,8 @@ export default function MapView() {
           <button onClick={addVehicle}>Agregar Vehículo</button>
           {vehicles.length > 0 && (
             <select 
+              id="vehicle-select"
+              name="vehicle"
               value={selectedVehicle || ''} 
               onChange={(e) => setSelectedVehicle(e.target.value)}
               style={{ marginLeft: '10px' }}
@@ -223,21 +256,29 @@ export default function MapView() {
 
         <div>
           <h4>Origen</h4>
-          <PlaceAutocomplete
-            onPlaceSelect={handleOriginPlaceSelect}
-            googleMapsApiKey={GOOGLE_MAPS_API_KEY || ''}
-            placeholder="Buscar dirección de origen..."
-          />
+          {isLoaded ? (
+            <PlaceAutocomplete
+              onPlaceSelect={handleOriginPlaceSelect}
+              googleMapsApiKey={GOOGLE_MAPS_API_KEY || ''}
+              placeholder="Buscar dirección de origen..."
+            />
+          ) : (
+            <div style={{ fontSize: 12, color: '#666' }}>Cargando Google Maps…</div>
+          )}
 
           <h4>Destino</h4>
-          <PlaceAutocomplete
-            onPlaceSelect={handleDestPlaceSelect}
-            googleMapsApiKey={GOOGLE_MAPS_API_KEY || ''}
-            placeholder="Buscar dirección de destino..."
-          />
+          {isLoaded ? (
+            <PlaceAutocomplete
+              onPlaceSelect={handleDestPlaceSelect}
+              googleMapsApiKey={GOOGLE_MAPS_API_KEY || ''}
+              placeholder="Buscar dirección de destino..."
+            />
+          ) : null}
 
           <h4>Paradas intermedias (opcional)</h4>
           <textarea
+            id="waypoints"
+            name="waypoints"
             value={waypointsInput}
             onChange={(e) => setWaypointsInput(e.target.value)}
             placeholder="Una dirección por línea"
@@ -284,7 +325,7 @@ export default function MapView() {
       </div>
 
       <div style={{ flex: 1 }}>
-        <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY as string} libraries={libraries}>
+        {isLoaded ? (
           <GoogleMap
             mapContainerStyle={containerStyle}
             center={defaultCenter}
@@ -322,7 +363,9 @@ export default function MapView() {
               />
             )}
           </GoogleMap>
-        </LoadScript>
+        ) : (
+          <div style={{ padding: 16, color: '#666' }}>Cargando mapa…</div>
+        )}
       </div>
     </div>
   )

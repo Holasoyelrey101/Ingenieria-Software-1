@@ -28,7 +28,14 @@ app = FastAPI(title="Gateway LuxChile ERP")
 # Configuración de CORS (para entorno local/frontend Vite)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    # Allow localhost/127.0.0.1 and common LAN ranges on any port
+    allow_origin_regex=r"https?://(localhost|127\\.0\\.0\\.1|192\\.168\\.[0-9]+\\.[0-9]+|10\\.[0-9]+\\.[0-9]+\\.[0-9]+|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]+\\.[0-9]+)(:\\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,7 +148,8 @@ def get_db():
 @app.post("/maps/geocode")
 async def maps_geocode(payload: dict):
     """Redirige solicitudes de geocodificación al microservicio de logística"""
-    ms_url = os.environ.get("MS_LOGISTICA_URL", "http://127.0.0.1:18001/maps/geocode")
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/maps/geocode" if base else "http://127.0.0.1:8001/maps/geocode"
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(ms_url, json=payload, timeout=20)
@@ -158,7 +166,8 @@ async def maps_geocode(payload: dict):
 @app.post("/maps/directions")
 async def maps_directions(payload: dict, request: Request, db: Session = Depends(get_db)):
     """Redirige solicitudes de direcciones (rutas) al microservicio de logística"""
-    ms_url = os.environ.get("MS_LOGISTICA_URL", "http://127.0.0.1:18001/maps/directions")
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/maps/directions" if base else "http://127.0.0.1:8001/maps/directions"
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(ms_url, json=payload, timeout=30)
@@ -210,8 +219,46 @@ async def maps_directions(payload: dict, request: Request, db: Session = Depends
     return JSONResponse(status_code=r.status_code, content=content)
 
 # ------------------------------------------------------
-# ADMINISTRACIÓN DE RUTAS REGISTRADAS
+# ADMINISTRACIÓN DE RUTAS REGISTRADAS Y PROXY DE RUTAS
 # ------------------------------------------------------
+
+@app.post("/routes/optimize")
+async def proxy_routes_optimize(payload: dict):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/routes/optimize" if base else "http://127.0.0.1:8001/routes/optimize"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=30)
+        try:
+            content = r.json()
+        except Exception:
+            content = {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica optimize request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error contacting ms-logistica optimize")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/routes/{route_id}")
+async def proxy_routes_get(route_id: int):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/routes/{route_id}" if base else f"http://127.0.0.1:8001/routes/{route_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        try:
+            content = r.json()
+        except Exception:
+            content = {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica get route failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error contacting ms-logistica get route")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
 
 @app.get("/admin/route-requests")
 def list_route_requests(limit: int = 100, db: Session = Depends(get_db)):
