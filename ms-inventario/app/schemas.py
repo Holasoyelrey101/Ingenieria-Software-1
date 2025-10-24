@@ -35,3 +35,38 @@ class AlertOut(BaseModel):
     leida: bool
     class Config:
         orm_mode = True
+
+# HU8 - Schemas para Recordatorios de Mantenimiento
+class MaintenanceReminderOut(BaseModel):
+    id: str
+    asset_id: int
+    maintenance_task_id: str
+    reminder_type: str
+    priority: str
+    title: str
+    message: str
+    created_at: datetime
+    due_date: datetime
+    reminded_at: Optional[datetime] = None
+    dismissed_at: Optional[datetime] = None
+    is_active: bool
+    is_dismissed: bool
+    days_before_due: int
+    
+    # Información del asset
+    asset_name: Optional[str] = None
+    asset_code: Optional[str] = None
+    asset_model: Optional[str] = None
+    
+    # Información de la tarea
+    task_title: Optional[str] = None
+    task_status: Optional[str] = None
+    
+    class Config:
+        orm_mode = True
+
+class ReminderStatsOut(BaseModel):
+    total_active: int
+    overdue: int
+    due_soon: int
+    critical_priority: int

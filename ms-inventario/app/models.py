@@ -248,3 +248,33 @@ class MaintenanceHistory(Base):
     asset = relationship('Asset')
     maintenance_task = relationship('MaintenanceTask')
     personnel = relationship('MaintenancePersonnel')
+
+# HU8 - Modelo para Recordatorios de Mantenimiento
+class MaintenanceReminder(Base):
+    __tablename__ = 'maintenance_reminders'
+    id = Column(String(50), primary_key=True, index=True)  # UUID como string
+    asset_id = Column(Integer, ForeignKey('assets.id', ondelete='CASCADE'))
+    maintenance_task_id = Column(String(50), ForeignKey('maintenance_tasks.id', ondelete='CASCADE'))
+    reminder_type = Column(String(50), nullable=False)  # 'due_soon', 'overdue', 'scheduled'
+    priority = Column(String(20), default='medium')  # 'low', 'medium', 'high', 'critical'
+    
+    # Mensaje del recordatorio
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    
+    # Fechas
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    due_date = Column(DateTime(timezone=True), nullable=False)
+    reminded_at = Column(DateTime(timezone=True))
+    dismissed_at = Column(DateTime(timezone=True))
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    is_dismissed = Column(Boolean, default=False)
+    
+    # Configuración del recordatorio
+    days_before_due = Column(Integer, default=7)  # Días antes del vencimiento
+    
+    # Relaciones
+    asset = relationship('Asset')
+    maintenance_task = relationship('MaintenanceTask')

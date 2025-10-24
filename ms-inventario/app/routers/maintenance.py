@@ -4,7 +4,7 @@ from app.db import get_db
 from app import models
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import logging
 
@@ -541,3 +541,144 @@ def create_maintenance_task(task_data: MaintenanceTaskCreate, db: Session = Depe
         logger.error(f"Error creando tarea: {e}")
         db.rollback()
         raise
+
+# HU8 - Endpoints para Recordatorios de Mantenimiento
+
+@router.get("/reminders/stats")
+def get_reminder_stats(db: Session = Depends(get_db)):
+    """
+    Obtiene estadísticas de recordatorios para mostrar en la navegación
+    """
+    try:
+        from datetime import datetime, timezone, timedelta
+        import uuid
+        
+        now = datetime.now(timezone.utc)
+        seven_days_from_now = now + timedelta(days=7)
+        
+        # Buscar tareas próximas a vencer y vencidas
+        upcoming_tasks = db.query(models.MaintenanceTask).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date.between(now, seven_days_from_now)
+        ).count()
+        
+        overdue_tasks = db.query(models.MaintenanceTask).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date < now
+        ).count()
+        
+        # Contar críticos (vencidos por más de 7 días)
+        seven_days_ago = now - timedelta(days=7)
+        critical_tasks = db.query(models.MaintenanceTask).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date < seven_days_ago
+        ).count()
+        
+        return {
+            "total_active": upcoming_tasks + overdue_tasks,
+            "overdue": overdue_tasks,
+            "due_soon": upcoming_tasks,
+            "critical_priority": critical_tasks
+        }
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas de recordatorios: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/reminders")
+def get_reminders(db: Session = Depends(get_db)):
+    """
+    Obtiene todos los recordatorios de mantenimiento
+    """
+    try:
+        from datetime import datetime, timezone, timedelta
+        import uuid
+        
+        now = datetime.now(timezone.utc)
+        seven_days_from_now = now + timedelta(days=7)
+        
+        # Buscar tareas próximas a vencer (próximos 7 días)
+        upcoming_tasks = db.query(models.MaintenanceTask, models.Asset, models.VehicleModel).join(
+            models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
+        ).outerjoin(
+            models.VehicleModel, models.Asset.vehicle_model_id == models.VehicleModel.id
+        ).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date.between(now, seven_days_from_now)
+        ).all()
+        
+        # Buscar tareas vencidas
+        overdue_tasks = db.query(models.MaintenanceTask, models.Asset, models.VehicleModel).join(
+            models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
+        ).outerjoin(
+            models.VehicleModel, models.Asset.vehicle_model_id == models.VehicleModel.id
+        ).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date < now
+        ).all()
+        
+        reminders = []
+        
+        # Procesar tareas próximas a vencer
+        for task, asset, vehicle_model in upcoming_tasks:
+            days_until_due = (task.due_date - now).days
+            
+            reminder_data = {
+                "id": f"upcoming_{task.id}",
+                "asset_id": task.asset_id,
+                "maintenance_task_id": task.id,
+                "reminder_type": "due_soon",
+                "priority": "medium" if days_until_due > 3 else "high",
+                "title": f"Mantenimiento próximo - {asset.name}",
+                "message": f"El vehículo {asset.name} ({asset.asset_code}) tiene mantenimiento programado en {days_until_due} días. Tarea: {task.title}",
+                "created_at": now,
+                "due_date": task.due_date,
+                "reminded_at": None,
+                "dismissed_at": None,
+                "is_active": True,
+                "is_dismissed": False,
+                "days_before_due": days_until_due,
+                "asset_name": asset.name,
+                "asset_code": asset.asset_code,
+                "asset_model": vehicle_model.name if vehicle_model else "N/A",
+                "task_title": task.title,
+                "task_status": task.status
+            }
+            reminders.append(reminder_data)
+        
+        # Procesar tareas vencidas
+        for task, asset, vehicle_model in overdue_tasks:
+            days_overdue = (now - task.due_date).days
+            
+            reminder_data = {
+                "id": f"overdue_{task.id}",
+                "asset_id": task.asset_id,
+                "maintenance_task_id": task.id,
+                "reminder_type": "overdue",
+                "priority": "critical" if days_overdue > 7 else "high",
+                "title": f"¡Mantenimiento vencido! - {asset.name}",
+                "message": f"El vehículo {asset.name} ({asset.asset_code}) tiene mantenimiento vencido hace {days_overdue} días. Tarea: {task.title}",
+                "created_at": now,
+                "due_date": task.due_date,
+                "reminded_at": None,
+                "dismissed_at": None,
+                "is_active": True,
+                "is_dismissed": False,
+                "days_before_due": -days_overdue,
+                "asset_name": asset.name,
+                "asset_code": asset.asset_code,
+                "asset_model": vehicle_model.name if vehicle_model else "N/A",
+                "task_title": task.title,
+                "task_status": task.status
+            }
+            reminders.append(reminder_data)
+        
+        # Ordenar por prioridad y fecha
+        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        reminders.sort(key=lambda x: (priority_order.get(x["priority"], 4), x["due_date"]))
+        
+        return {"reminders": reminders}
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo recordatorios: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

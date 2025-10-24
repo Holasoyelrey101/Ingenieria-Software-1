@@ -78,7 +78,44 @@ class MaintenanceAPI {
     return this.fetchAPI('/maintenance/assets');
   }
 
+  // HU8 - Métodos para Recordatorios de Mantenimiento
+  async getReminderStats(): Promise<ReminderStats> {
+    return this.fetchAPI('/maintenance/reminders/stats');
+  }
 
+  async getReminders(): Promise<{ reminders: MaintenanceReminder[] }> {
+    return this.fetchAPI('/maintenance/reminders');
+  }
+}
+
+// HU8 - Interfaces para recordatorios
+export interface MaintenanceReminder {
+  id: string;
+  asset_id: number;
+  maintenance_task_id: string;
+  reminder_type: string;
+  priority: string;
+  title: string;
+  message: string;
+  created_at: string;
+  due_date: string;
+  reminded_at?: string;
+  dismissed_at?: string;
+  is_active: boolean;
+  is_dismissed: boolean;
+  days_before_due: number;
+  asset_name?: string;
+  asset_code?: string;
+  asset_model?: string;
+  task_title?: string;
+  task_status?: string;
+}
+
+export interface ReminderStats {
+  total_active: number;
+  overdue: number;
+  due_soon: number;
+  critical_priority: number;
 }
 
 export const maintenanceAPI = new MaintenanceAPI();
