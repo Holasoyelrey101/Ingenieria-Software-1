@@ -1,16 +1,46 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+# -*- coding: utf-8 -*-
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app import models
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import uuid
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
+
+# Función global para limpiar caracteres especiales
+def clean_special_chars(text):
+    """Elimina todos los caracteres especiales que causan problemas de codificación"""
+    if not text:
+        return text
+    
+    # Mapeo completo de caracteres especiales
+    char_map = {
+        'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a', 'ã': 'a', 'å': 'a',
+        'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
+        'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
+        'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o', 'õ': 'o',
+        'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
+        'ñ': 'n', 'ç': 'c',
+        'Á': 'A', 'À': 'A', 'Ä': 'A', 'Â': 'A', 'Ã': 'A', 'Å': 'A',
+        'É': 'E', 'È': 'E', 'Ë': 'E', 'Ê': 'E',
+        'Í': 'I', 'Ì': 'I', 'Ï': 'I', 'Î': 'I',
+        'Ó': 'O', 'Ò': 'O', 'Ö': 'O', 'Ô': 'O', 'Õ': 'O',
+        'Ú': 'U', 'Ù': 'U', 'Ü': 'U', 'Û': 'U',
+        'Ñ': 'N', 'Ç': 'C'
+    }
+    
+    for char, replacement in char_map.items():
+        text = text.replace(char, replacement)
+    
+    return text
 
 # Schemas de Pydantic
 class AssetCreate(BaseModel):
@@ -73,78 +103,8 @@ class MaintenanceTaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Datos de demo para assets
-demo_assets = [
-    {
-        "name": "Camión Volvo FH-001 Luxury Transport",
-        "location": "Terminal Puerto Santiago",
-        "status": "active"
-    },
-    {
-        "name": "Mercedes Actros A-002 Premium Cargo",
-        "location": "Centro Distribución Las Condes", 
-        "status": "active"
-    },
-    {
-        "name": "BMW X7 B-003 Executive Transport",
-        "location": "Showroom Providencia",
-        "status": "active"
-    },
-    {
-        "name": "Mercedes Sprinter S-004 Luxury Van",
-        "location": "Terminal Aeroporto SCL",
-        "status": "maintenance"
-    },
-    {
-        "name": "Montacargas Toyota 8FG25-005",
-        "location": "Bodega Artículos Premium",
-        "status": "active"
-    },
-    {
-        "name": "Audi Q8 A-006 VIP Transport",
-        "location": "Base Vitacura",
-        "status": "active"
-    },
-    {
-        "name": "Mercedes EQS E-007 Electric Luxury",
-        "location": "Estación de Carga Premium",
-        "status": "active"
-    },
-    {
-        "name": "Scania R450 S-008 High-End Cargo",
-        "location": "Terminal Puerto Valparaíso",
-        "status": "maintenance"
-    }
-]
-
-# Función helper para asignar técnicos
-def assign_technician_by_task(title: str, priority: str) -> str:
-    """Asignar técnico basado en el tipo de tarea y prioridad"""
-    technicians = {
-        "vip_specialist": "Juan Carlos Pérez",
-        "luxury_specialist": "María Elena González", 
-        "premium_service": "Carlos Alberto Ruiz",
-        "electrical_luxury": "Pedro Luis Torres",
-        "detailing_premium": "Ana Patricia Moreno",
-        "general_luxury": "Roberto José Sánchez"
-    }
-    
-    title_lower = title.lower()
-    
-    if "eléctrico" in title_lower or "mercedes eqs" in title_lower or "software" in title_lower:
-        return technicians["electrical_luxury"]
-    elif "vip" in title_lower or "executive" in title_lower or "bmw" in title_lower:
-        return technicians["vip_specialist"]
-    elif "premium" in title_lower or "luxury" in title_lower:
-        return technicians["luxury_specialist"]
-    elif "detailing" in title_lower or "limpieza" in title_lower:
-        return technicians["detailing_premium"]
-    elif priority == "high":
-        return technicians["vip_specialist"]
-    elif priority == "medium":
-        return technicians["luxury_specialist"]
-    else:
-        return technicians["general_luxury"]
+# NOTA: Los datos de assets ahora vienen directamente de la base de datos
+# Los vehículos de transporte de lujo blindado están definidos en 008_luxury_transport_vehicles.sql
 
 # Función para inicializar datos base
 def initialize_base_data(db: Session):
@@ -155,8 +115,8 @@ def initialize_base_data(db: Session):
             categories = [
                 {"name": "Vehículos de Carga Premium", "description": "Camiones especializados en transporte de lujo", "color_code": "#EF4444"},
                 {"name": "Vehículos Ejecutivos", "description": "Automóviles de alta gama para transporte VIP", "color_code": "#F97316"},
-                {"name": "Equipos de Bodega", "description": "Montacargas y equipos de almacén premium", "color_code": "#EAB308"},
-                {"name": "Vehículos Eléctricos", "description": "Flota eléctrica de lujo y sustentable", "color_code": "#10B981"},
+                {"name": "Equipos de Bodega", "description": "Montacargas y equipos de almacen premium", "color_code": "#EAB308"},
+                {"name": "Vehiculos Electricos", "description": "Flota electrica de lujo y sustentable", "color_code": "#10B981"},
                 {"name": "Vehículos Especializados", "description": "Vans y vehículos para transporte especializado", "color_code": "#8B5CF6"}
             ]
             for cat_data in categories:
@@ -171,8 +131,8 @@ def initialize_base_data(db: Session):
                 {"name": "Mercedes-Benz", "country": "Alemania"},
                 {"name": "BMW", "country": "Alemania"},
                 {"name": "Audi", "country": "Alemania"},
-                {"name": "Toyota", "country": "Japón"},
-                {"name": "Lexus", "country": "Japón"},
+                {"name": "Toyota", "country": "Japon"},
+                {"name": "Lexus", "country": "Japon"},
                 {"name": "Porsche", "country": "Alemania"},
                 {"name": "Scania", "country": "Suecia"}
             ]
@@ -184,11 +144,11 @@ def initialize_base_data(db: Session):
         # Crear personal de mantenimiento si no existe
         if db.query(models.MaintenancePersonnel).count() == 0:
             personnel = [
-                {"employee_code": "MECH001", "first_name": "Juan Carlos", "last_name": "Pérez López", "email": "juan.perez@luxchile.com"},
-                {"employee_code": "MECH002", "first_name": "María Elena", "last_name": "González Silva", "email": "maria.gonzalez@luxchile.com"},
+                {"employee_code": "MECH001", "first_name": "Juan Carlos", "last_name": "Perez Lopez", "email": "juan.perez@luxchile.com"},
+                {"employee_code": "MECH002", "first_name": "Maria Elena", "last_name": "Gonzalez Silva", "email": "maria.gonzalez@luxchile.com"},
                 {"employee_code": "MECH003", "first_name": "Carlos Alberto", "last_name": "Ruiz Morales", "email": "carlos.ruiz@luxchile.com"},
                 {"employee_code": "MECH004", "first_name": "Ana Patricia", "last_name": "Moreno Castro", "email": "ana.moreno@luxchile.com"},
-                {"employee_code": "MECH005", "first_name": "Roberto José", "last_name": "Sánchez Díaz", "email": "roberto.sanchez@luxchile.com"},
+                {"employee_code": "MECH005", "first_name": "Roberto Jose", "last_name": "Sanchez Diaz", "email": "roberto.sanchez@luxchile.com"},
                 {"employee_code": "ELEC001", "first_name": "Pedro Luis", "last_name": "Torres Vega", "email": "pedro.torres@luxchile.com"}
             ]
             for person_data in personnel:
@@ -201,7 +161,7 @@ def initialize_base_data(db: Session):
             maintenance_types = [
                 {"name": "Mantenimiento Preventivo Completo", "category": "preventive", "description": "Revisión completa programada", "estimated_duration": 8},
                 {"name": "Reparación Correctiva", "category": "corrective", "description": "Reparación de fallas", "estimated_duration": 6},
-                {"name": "Análisis Predictivo", "category": "predictive", "description": "Análisis de condición", "estimated_duration": 3}
+                {"name": "Analisis Predictivo", "category": "predictive", "description": "Analisis de condicion", "estimated_duration": 3}
             ]
             for type_data in maintenance_types:
                 maint_type = models.MaintenanceType(**type_data)
@@ -215,19 +175,28 @@ def initialize_base_data(db: Session):
 # Rutas de Assets
 @router.get("/assets")
 def get_assets(db: Session = Depends(get_db)):
-    # Inicializar datos base
-    initialize_base_data(db)
-    
-    # Crear assets de demo si no existen
-    existing_count = db.query(models.Asset).count()
-    if existing_count == 0:
-        for asset_data in demo_assets:
-            asset = models.Asset(**asset_data)
-            db.add(asset)
-        db.commit()
-    
-    assets = db.query(models.Asset).all()
-    return [{"id": a.id, "name": a.name, "location": a.location, "status": a.status} for a in assets]
+    """
+    Obtiene todos los assets desde la base de datos.
+    Los datos están definidos en los scripts SQL de inicialización.
+    """
+    try:
+        # Inicializar datos base si es necesario
+        initialize_base_data(db)
+        
+        # Obtener assets directamente de la base de datos
+        assets = db.query(models.Asset).all()
+        
+        # Si no hay assets, significa que los scripts SQL no se han ejecutado
+        if not assets:
+            logger.warning("No se encontraron assets en la base de datos. Verifica que los scripts SQL se hayan ejecutado correctamente.")
+            return []
+        
+        return [{"id": a.id, "name": clean_special_chars(a.name), "location": clean_special_chars(a.location), "status": a.status} for a in assets]
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo assets: {e}")
+        # Retornar lista vacía en caso de error
+        return []
 
 @router.post("/assets", response_model=AssetResponse)
 def create_asset(asset: AssetCreate, db: Session = Depends(get_db)):
@@ -240,172 +209,100 @@ def create_asset(asset: AssetCreate, db: Session = Depends(get_db)):
 # Rutas de Maintenance Tasks
 @router.get("/tasks")
 def get_maintenance_tasks(status: Optional[str] = None, db: Session = Depends(get_db)):
-    # Asegurar que existen assets
-    get_assets(db)
-    
-    # Crear tareas de demo si no existen
-    existing_tasks = db.query(models.MaintenanceTask).count()
-    if existing_tasks == 0:
-        assets = db.query(models.Asset).all()
-        if assets:
-            demo_tasks = [
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[0].id,
-                    "title": "Mantenimiento Preventivo - Volvo Luxury Transport",
-                    "description": "Cambio de aceite premium, filtros de alta gama, revisión de sistemas de climatización",
-                    "priority": "high",
-                    "status": "pending",
-                    "scheduled_date": datetime(2025, 10, 25),
-                    "due_date": datetime(2025, 10, 27),
-                    "estimated_duration": 4
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[1].id if len(assets) > 1 else assets[0].id,
-                    "title": "Revisión Sistema de Carga - Mercedes Premium",
-                    "description": "Revisión de sistema de sujeción para artículos de lujo y temperatura controlada",
-                    "priority": "medium",
-                    "status": "in_progress",
-                    "scheduled_date": datetime(2025, 10, 23),
-                    "due_date": datetime(2025, 10, 24),
-                    "estimated_duration": 6
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[2].id if len(assets) > 2 else assets[0].id,
-                    "title": "Inspección VIP - BMW X7 Executive",
-                    "description": "Limpieza premium, revisión de sistemas de entretenimiento y confort",
-                    "priority": "high",
-                    "status": "completed",
-                    "scheduled_date": datetime(2025, 10, 20),
-                    "due_date": datetime(2025, 10, 22),
-                    "estimated_duration": 3,
-                    "completed_at": datetime(2025, 10, 21)
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[3].id if len(assets) > 3 else assets[0].id,
-                    "title": "Servicio Premium - Mercedes Sprinter Luxury",
-                    "description": "Detailing completo, revisión de sistemas de climatización y audio premium",
-                    "priority": "high",
-                    "status": "pending",
-                    "scheduled_date": datetime(2025, 10, 24),
-                    "due_date": datetime(2025, 10, 26),
-                    "estimated_duration": 5
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[4].id if len(assets) > 4 else assets[0].id,
-                    "title": "Mantenimiento Especializado - Montacargas Premium",
-                    "description": "Calibración de sistemas de manejo delicado para artículos de lujo",
-                    "priority": "medium",
-                    "status": "in_progress",
-                    "scheduled_date": datetime(2025, 10, 22),
-                    "due_date": datetime(2025, 10, 23),
-                    "estimated_duration": 4
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[5].id if len(assets) > 5 else assets[0].id,
-                    "title": "Inspección VIP - Audi Q8 Transport",
-                    "description": "Revisión completa de sistemas, limpieza premium y verificación de confort",
-                    "priority": "medium",
-                    "status": "completed",
-                    "scheduled_date": datetime(2025, 10, 18),
-                    "due_date": datetime(2025, 10, 20),
-                    "estimated_duration": 3,
-                    "completed_at": datetime(2025, 10, 19)
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[6].id if len(assets) > 6 else assets[0].id,
-                    "title": "Mantenimiento Eléctrico - Mercedes EQS",
-                    "description": "Revisión de batería, sistemas de carga y software de última generación",
-                    "priority": "high",
-                    "status": "pending",
-                    "scheduled_date": datetime(2025, 10, 26),
-                    "due_date": datetime(2025, 10, 28),
-                    "estimated_duration": 6
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[7].id if len(assets) > 7 else assets[0].id,
-                    "title": "Reparación Especializada - Scania High-End",
-                    "description": "Reparación de sistema de refrigeración para transporte de productos sensibles",
-                    "priority": "high",
-                    "status": "pending",
-                    "scheduled_date": datetime(2025, 10, 28),
-                    "due_date": datetime(2025, 11, 2),
-                    "estimated_duration": 16
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[0].id,
-                    "title": "Certificación de Seguridad - Volvo Luxury",
-                    "description": "Certificación para transporte de artículos de alto valor, revisión de sistemas de seguridad",
-                    "priority": "medium",
-                    "status": "completed",
-                    "scheduled_date": datetime(2025, 10, 15),
-                    "due_date": datetime(2025, 10, 17),
-                    "estimated_duration": 2,
-                    "completed_at": datetime(2025, 10, 16)
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "asset_id": assets[2].id if len(assets) > 2 else assets[0].id,
-                    "title": "Actualización de Software - BMW X7",
-                    "description": "Actualización de sistemas de navegación y entretenimiento premium",
-                    "priority": "medium",
-                    "status": "in_progress",
-                    "scheduled_date": datetime(2025, 10, 24),
-                    "due_date": datetime(2025, 10, 25),
-                    "estimated_duration": 3
-                }
-            ]
-            
-            for task_data in demo_tasks:
-                task = models.MaintenanceTask(**task_data)
-                db.add(task)
-            db.commit()
-    
-    query = db.query(models.MaintenanceTask).join(models.Asset)
-    
-    if status and status != 'all':
-        query = query.filter(models.MaintenanceTask.status == status)
-    
-    tasks = query.all()
-    
-    # Mapear estados de inglés a español para el frontend
-    status_map_response = {
-        'pending': 'pendiente',
-        'in_progress': 'en_progreso',
-        'completed': 'completada'
-    }
-    
-    # Formatear respuesta con nombre del asset
-    result = []
-    for task in tasks:
-        task_dict = {
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "status": status_map_response.get(task.status, task.status),
-            "created_at": task.created_at.isoformat(),
-            "due_date": task.due_date.isoformat() if task.due_date else None,
-            "asset_name": task.asset.name if task.asset else "Unknown",
-            "task_type": task.task_type if hasattr(task, 'task_type') else ("preventive" if "preventiv" in task.title.lower() else "corrective" if "correct" in task.title.lower() else "predictive"),
-            "technician_assigned": assign_technician_by_task(task.title, task.priority)
-        }
-        result.append(task_dict)
-    
-    return result
+    """
+    Obtiene las tareas de mantenimiento desde la base de datos.
+    Las tareas están definidas en los scripts SQL de inicialización.
+    """
+    try:
+        from sqlalchemy.orm import joinedload
+        
+        # Asegurar que existen assets
+        get_assets(db)
+        
+        # Obtener tareas directamente de la base de datos CON EAGER LOADING
+        query = db.query(models.MaintenanceTask)\
+            .join(models.Asset)\
+            .options(joinedload(models.MaintenanceTask.asset))\
+            .options(joinedload(models.MaintenanceTask.maintenance_type))\
+            .options(joinedload(models.MaintenanceTask.personnel))
+        
+        if status and status != 'all':
+            query = query.filter(models.MaintenanceTask.status == status)
+        
+        tasks = query.all()
+        
+        # Si no hay tareas, las definidas en SQL no se han cargado aún
+        if not tasks:
+            logger.warning("No se encontraron tareas de mantenimiento en la base de datos.")
+            return []
 
-# Primera función POST eliminada - usando solo la versión mejorada más abajo
+        # Mapear estados de inglés a español para el frontend
+        status_map_response = {
+            'pending': 'pendiente',
+            'in_progress': 'en_progreso',
+            'completed': 'completada'
+        }
+
+        # Formatear respuesta con nombre del asset
+        result = []
+        from datetime import timezone
+        current_time = datetime.now(timezone.utc)
+        
+        for task in tasks:
+            # Determinar si está vencido
+            is_overdue = (task.due_date and 
+                         task.due_date < current_time and 
+                         task.status != 'completed')
+            
+            task_dict = {
+                "id": task.id,
+                "title": clean_special_chars(task.title),
+                "description": clean_special_chars(task.description) if task.description else "",
+                "status": status_map_response.get(task.status, task.status),
+                "created_at": task.created_at.isoformat(),
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "asset_name": clean_special_chars(task.asset.name) if task.asset else "Unknown",
+                "task_type": task.maintenance_type.category if hasattr(task, 'maintenance_type') and task.maintenance_type else "preventive",
+                "technician_assigned": f"{task.personnel.first_name} {task.personnel.last_name}" if hasattr(task, 'personnel') and task.personnel else "Sin asignar",
+                "is_overdue": is_overdue
+            }
+            result.append(task_dict)
+
+        # ORDENAR POR PRIORIDAD EN EL BACKEND
+        def get_priority(task):
+            if task.get('is_overdue'):
+                return 0  # VENCIDOS PRIMERO
+            status = task.get('status', '')
+            if status == 'pendiente':
+                return 1
+            elif status == 'en_progreso':
+                return 2
+            elif status == 'completada':
+                return 3
+            return 4
+        
+        # Ordenar y devolver
+        result.sort(key=get_priority)
+        logger.info(f"Devolviendo {len(result)} tareas ordenadas por prioridad")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo tareas de mantenimiento: {e}")
+        return []
 
 @router.put("/tasks/{task_id}")
 def update_maintenance_task(task_id: str, task_update: dict, db: Session = Depends(get_db)):
-    db_task = db.query(models.MaintenanceTask).filter(models.MaintenanceTask.id == task_id).first()
+    from sqlalchemy.orm import joinedload
+    
+    # Consultar tarea con eager loading de relaciones
+    db_task = db.query(models.MaintenanceTask)\
+        .options(joinedload(models.MaintenanceTask.asset))\
+        .options(joinedload(models.MaintenanceTask.maintenance_type))\
+        .options(joinedload(models.MaintenanceTask.personnel))\
+        .filter(models.MaintenanceTask.id == task_id)\
+        .first()
+    
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -431,8 +328,6 @@ def update_maintenance_task(task_id: str, task_update: dict, db: Session = Depen
     db.commit()
     db.refresh(db_task)
     
-    asset = db.query(models.Asset).filter(models.Asset.id == db_task.asset_id).first()
-    
     # Mapear estados de inglés a español para el frontend
     status_map_response = {
         'pending': 'pendiente',
@@ -440,32 +335,56 @@ def update_maintenance_task(task_id: str, task_update: dict, db: Session = Depen
         'completed': 'completada'
     }
     
+    # Obtener task_type y technician de la base de datos (NO HARDCODEADO)
+    task_type = "preventive"  # default
+    if db_task.maintenance_type:
+        task_type = db_task.maintenance_type.category
+    
+    technician_assigned = "Sin asignar"  # default
+    if db_task.personnel:
+        technician_assigned = f"{db_task.personnel.first_name} {db_task.personnel.last_name}"
+    
+    asset_name = "Unknown"  # default
+    if db_task.asset:
+        asset_name = clean_special_chars(db_task.asset.name)
+    
     return {
         "id": db_task.id,
-        "title": db_task.title,
-        "description": db_task.description,
+        "title": clean_special_chars(db_task.title),
+        "description": clean_special_chars(db_task.description) if db_task.description else "",
         "status": status_map_response.get(db_task.status, db_task.status),
         "created_at": db_task.created_at.isoformat(),
         "due_date": db_task.due_date.isoformat() if db_task.due_date else None,
-        "asset_name": asset.name if asset else "Unknown",
-        "task_type": "preventive" if "preventiv" in db_task.title.lower() else "corrective" if "correct" in db_task.title.lower() else "predictive",
-        "technician_assigned": assign_technician_by_task(db_task.title, db_task.priority)
+        "asset_name": asset_name,
+        "task_type": task_type,
+        "technician_assigned": technician_assigned
     }
 
 @router.get("/tasks/stats")
 def get_maintenance_stats(db: Session = Depends(get_db)):
     try:
+        from datetime import datetime
+        
         # Inicializar datos base si es necesario
         initialize_base_data(db)
         
         # Asegurar que existen tareas de demo
         get_maintenance_tasks(db=db)
         
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        
         total = db.query(models.MaintenanceTask).count()
         pending = db.query(models.MaintenanceTask).filter(models.MaintenanceTask.status == 'pending').count()
         in_progress = db.query(models.MaintenanceTask).filter(models.MaintenanceTask.status == 'in_progress').count()
         completed = db.query(models.MaintenanceTask).filter(models.MaintenanceTask.status == 'completed').count()
-        overdue = db.query(models.MaintenanceTask).filter(models.MaintenanceTask.status == 'overdue').count()
+        
+        # Calcular vencidas dinámicamente: tareas pendientes con fecha vencida
+        overdue = db.query(models.MaintenanceTask).filter(
+            models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date.isnot(None),
+            models.MaintenanceTask.due_date < now
+        ).count()
         
         return {
             "total": total,
@@ -528,12 +447,12 @@ def create_maintenance_task(task_data: MaintenanceTaskCreate, db: Session = Depe
         
         return {
             "id": new_task.id,
-            "title": new_task.title,
-            "description": new_task.description,
+            "title": clean_special_chars(new_task.title),
+            "description": clean_special_chars(new_task.description) if new_task.description else "",
             "status": status_map_response.get(new_task.status, new_task.status),
             "created_at": new_task.created_at.isoformat(),
             "due_date": new_task.due_date.isoformat() if new_task.due_date else None,
-            "asset_name": asset.name,
+            "asset_name": clean_special_chars(asset.name),
             "task_type": task_type,
             "technician_assigned": None
         }
@@ -547,38 +466,56 @@ def create_maintenance_task(task_data: MaintenanceTaskCreate, db: Session = Depe
 @router.get("/reminders/stats")
 def get_reminder_stats(db: Session = Depends(get_db)):
     """
-    Obtiene estadísticas de recordatorios para mostrar en la navegación
+    Obtiene estadísticas dinámicas de recordatorios correlacionadas con mantenimientos
     """
     try:
-        from datetime import datetime, timezone, timedelta
-        import uuid
+        # Usar la función de base de datos que actualiza dinámicamente
+        try:
+            result = db.execute("SELECT * FROM get_dynamic_reminder_stats()").fetchone()
+            
+            if result:
+                return {
+                    "total_active": result.total_active,
+                    "overdue": result.overdue,
+                    "due_soon": result.due_soon,
+                    "critical_priority": result.critical_priority
+                }
+        except Exception as db_error:
+            logger.warning(f"No se pudo usar la función dinámica de recordatorios: {db_error}")
         
-        now = datetime.now(timezone.utc)
+        # Fallback: calcular manualmente con correlación directa a mantenimientos
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
         seven_days_from_now = now + timedelta(days=7)
         
-        # Buscar tareas próximas a vencer y vencidas
-        upcoming_tasks = db.query(models.MaintenanceTask).filter(
+        # Próximos = tareas pendientes que vencen en 7 días (correlaciona con "Pendientes")
+        due_soon = db.query(models.MaintenanceTask).filter(
             models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date.isnot(None),
             models.MaintenanceTask.due_date.between(now, seven_days_from_now)
         ).count()
         
-        overdue_tasks = db.query(models.MaintenanceTask).filter(
+        # Vencidos = tareas pendientes con fecha pasada (correlaciona con "Vencidas")
+        overdue = db.query(models.MaintenanceTask).filter(
             models.MaintenanceTask.status == 'pending',
+            models.MaintenanceTask.due_date.isnot(None),
             models.MaintenanceTask.due_date < now
         ).count()
         
-        # Contar críticos (vencidos por más de 7 días)
-        seven_days_ago = now - timedelta(days=7)
-        critical_tasks = db.query(models.MaintenanceTask).filter(
-            models.MaintenanceTask.status == 'pending',
-            models.MaintenanceTask.due_date < seven_days_ago
+        # En proceso = tareas en progreso que requieren seguimiento
+        in_process = db.query(models.MaintenanceTask).filter(
+            models.MaintenanceTask.status == 'in_progress'
         ).count()
         
+        # Total activo = solo los que requieren atención (NO completados)
+        total_active = overdue + due_soon + in_process
+        
         return {
-            "total_active": upcoming_tasks + overdue_tasks,
-            "overdue": overdue_tasks,
-            "due_soon": upcoming_tasks,
-            "critical_priority": critical_tasks
+            "total_active": total_active,
+            "overdue": overdue,
+            "due_soon": due_soon,
+            "critical_priority": in_process  # En proceso como críticos que necesitan seguimiento
         }
         
     except Exception as e:
@@ -588,97 +525,216 @@ def get_reminder_stats(db: Session = Depends(get_db)):
 @router.get("/reminders")
 def get_reminders(db: Session = Depends(get_db)):
     """
-    Obtiene todos los recordatorios de mantenimiento
+    Obtiene recordatorios dinámicos usando la función de base de datos que actualiza automáticamente
     """
     try:
-        from datetime import datetime, timezone, timedelta
-        import uuid
-        
-        now = datetime.now(timezone.utc)
-        seven_days_from_now = now + timedelta(days=7)
-        
-        # Buscar tareas próximas a vencer (próximos 7 días)
-        upcoming_tasks = db.query(models.MaintenanceTask, models.Asset, models.VehicleModel).join(
-            models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
-        ).outerjoin(
-            models.VehicleModel, models.Asset.vehicle_model_id == models.VehicleModel.id
-        ).filter(
-            models.MaintenanceTask.status == 'pending',
-            models.MaintenanceTask.due_date.between(now, seven_days_from_now)
-        ).all()
-        
-        # Buscar tareas vencidas
-        overdue_tasks = db.query(models.MaintenanceTask, models.Asset, models.VehicleModel).join(
-            models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
-        ).outerjoin(
-            models.VehicleModel, models.Asset.vehicle_model_id == models.VehicleModel.id
-        ).filter(
-            models.MaintenanceTask.status == 'pending',
-            models.MaintenanceTask.due_date < now
-        ).all()
-        
-        reminders = []
-        
-        # Procesar tareas próximas a vencer
-        for task, asset, vehicle_model in upcoming_tasks:
-            days_until_due = (task.due_date - now).days
+        # Usar la función de base de datos que actualiza dinámicamente los recordatorios
+        try:
+            result = db.execute("SELECT * FROM get_dynamic_reminders()").fetchall()
             
-            reminder_data = {
-                "id": f"upcoming_{task.id}",
-                "asset_id": task.asset_id,
-                "maintenance_task_id": task.id,
-                "reminder_type": "due_soon",
-                "priority": "medium" if days_until_due > 3 else "high",
-                "title": f"Mantenimiento próximo - {asset.name}",
-                "message": f"El vehículo {asset.name} ({asset.asset_code}) tiene mantenimiento programado en {days_until_due} días. Tarea: {task.title}",
-                "created_at": now,
-                "due_date": task.due_date,
-                "reminded_at": None,
-                "dismissed_at": None,
-                "is_active": True,
-                "is_dismissed": False,
-                "days_before_due": days_until_due,
-                "asset_name": asset.name,
-                "asset_code": asset.asset_code,
-                "asset_model": vehicle_model.name if vehicle_model else "N/A",
-                "task_title": task.title,
-                "task_status": task.status
-            }
-            reminders.append(reminder_data)
-        
-        # Procesar tareas vencidas
-        for task, asset, vehicle_model in overdue_tasks:
-            days_overdue = (now - task.due_date).days
+            reminders = []
+            for row in result:
+                # Calcular días hasta el vencimiento o días vencidos
+                now = datetime.now()
+                due_date = row.due_date.replace(tzinfo=None) if row.due_date and row.due_date.tzinfo else row.due_date
+                
+                if due_date:
+                    if due_date > now:
+                        days_before_due = (due_date - now).days
+                    else:
+                        days_before_due = -(now - due_date).days  # Negativo para vencidos
+                else:
+                    days_before_due = 0
+                
+                # Obtener datos reales del asset desde la base de datos
+                asset = db.query(models.Asset).filter(models.Asset.id == row.asset_id).first()
+                asset_code = asset.asset_code if asset and asset.asset_code else f"AST-{row.asset_id:03d}"
+                
+                # Obtener modelo del vehículo desde las relaciones
+                asset_model = "Sin modelo"
+                if asset and asset.vehicle_model:
+                    model_name = asset.vehicle_model.name if asset.vehicle_model.name else ""
+                    brand_name = asset.vehicle_model.brand.name if asset.vehicle_model.brand else ""
+                    asset_model = f"{brand_name} {model_name}" if brand_name or model_name else "Sin modelo"
+                
+                reminder_data = {
+                    "id": str(row.id),
+                    "asset_id": row.asset_id,
+                    "maintenance_task_id": str(row.maintenance_task_id),
+                    "reminder_type": row.reminder_type,
+                    "priority": row.priority,
+                    "title": clean_special_chars(row.title),
+                    "message": clean_special_chars(row.message),
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "due_date": due_date.isoformat() if due_date else None,
+                    "reminded_at": row.reminded_at.isoformat() if row.reminded_at else None,
+                    "dismissed_at": row.dismissed_at.isoformat() if row.dismissed_at else None,
+                    "is_active": row.is_active,
+                    "is_dismissed": row.is_dismissed,
+                    "days_before_due": days_before_due,
+                    "asset_name": clean_special_chars(row.asset_name),
+                    "asset_code": asset_code,
+                    "asset_model": asset_model,
+                    "task_title": clean_special_chars(row.title),
+                    "task_status": row.task_status
+                }
+                reminders.append(reminder_data)
             
-            reminder_data = {
-                "id": f"overdue_{task.id}",
-                "asset_id": task.asset_id,
-                "maintenance_task_id": task.id,
-                "reminder_type": "overdue",
-                "priority": "critical" if days_overdue > 7 else "high",
-                "title": f"¡Mantenimiento vencido! - {asset.name}",
-                "message": f"El vehículo {asset.name} ({asset.asset_code}) tiene mantenimiento vencido hace {days_overdue} días. Tarea: {task.title}",
-                "created_at": now,
-                "due_date": task.due_date,
-                "reminded_at": None,
-                "dismissed_at": None,
-                "is_active": True,
-                "is_dismissed": False,
-                "days_before_due": -days_overdue,
-                "asset_name": asset.name,
-                "asset_code": asset.asset_code,
-                "asset_model": vehicle_model.name if vehicle_model else "N/A",
-                "task_title": task.title,
-                "task_status": task.status
-            }
-            reminders.append(reminder_data)
-        
-        # Ordenar por prioridad y fecha
-        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-        reminders.sort(key=lambda x: (priority_order.get(x["priority"], 4), x["due_date"]))
-        
-        return {"reminders": reminders}
+            return {"reminders": reminders}
+            
+        except Exception as db_error:
+            logger.warning(f"No se pudo usar la función dinámica de recordatorios: {db_error}")
+            # Fallback: usar el método anterior
+            return get_reminders_from_tasks(db)
         
     except Exception as e:
         logger.error(f"Error obteniendo recordatorios: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def get_reminders_from_tasks(db: Session):
+    """
+    Función fallback para generar recordatorios desde las tareas de mantenimiento vencidas
+    """
+    from datetime import datetime, timedelta
+    
+    now = datetime.now()
+    seven_days_from_now = now + timedelta(days=7)
+    
+    # Buscar tareas próximas a vencer (próximos 7 días)  
+    upcoming_tasks = db.query(models.MaintenanceTask).join(
+        models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
+    ).filter(
+        models.MaintenanceTask.status == 'pending',
+        models.MaintenanceTask.due_date.isnot(None),
+        models.MaintenanceTask.due_date.between(now, seven_days_from_now)
+    ).all()
+    
+    # Buscar tareas vencidas
+    overdue_tasks = db.query(models.MaintenanceTask).join(
+        models.Asset, models.MaintenanceTask.asset_id == models.Asset.id
+    ).filter(
+        models.MaintenanceTask.status == 'pending',
+        models.MaintenanceTask.due_date.isnot(None),
+        models.MaintenanceTask.due_date < now
+    ).all()
+    
+    reminders = []
+    
+    # Procesar tareas próximas a vencer
+    for task in upcoming_tasks:
+        asset = task.asset
+        task_due_date = task.due_date.replace(tzinfo=None) if task.due_date.tzinfo else task.due_date
+        days_until_due = (task_due_date - now).days
+        
+        # Obtener modelo del vehículo desde las relaciones
+        asset_model = "Sin modelo"
+        if asset.vehicle_model:
+            model_name = asset.vehicle_model.name if asset.vehicle_model.name else ""
+            brand_name = asset.vehicle_model.brand.name if asset.vehicle_model.brand else ""
+            asset_model = f"{brand_name} {model_name}" if brand_name or model_name else "Sin modelo"
+        
+        reminder_data = {
+            "id": f"upcoming_{task.id}",
+            "asset_id": task.asset_id,
+            "maintenance_task_id": task.id,
+            "reminder_type": "due_soon",
+            "priority": "medium" if days_until_due > 3 else "high",
+            "title": f"Mantenimiento proximo - {clean_special_chars(asset.name)}",
+            "message": f"El vehiculo {clean_special_chars(asset.name)} tiene mantenimiento programado en {days_until_due} dias. Tarea: {clean_special_chars(task.title)}",
+            "created_at": now.isoformat(),
+            "due_date": task_due_date.isoformat(),
+            "reminded_at": None,
+            "dismissed_at": None,
+            "is_active": True,
+            "is_dismissed": False,
+            "days_before_due": days_until_due,
+            "asset_name": clean_special_chars(asset.name),
+            "asset_code": asset.asset_code if asset.asset_code else f"AST-{asset.id:03d}",
+            "asset_model": asset_model,
+            "task_title": clean_special_chars(task.title),
+            "task_status": task.status
+        }
+        reminders.append(reminder_data)
+    
+    # Procesar tareas vencidas
+    for task in overdue_tasks:
+        asset = task.asset
+        task_due_date = task.due_date.replace(tzinfo=None) if task.due_date.tzinfo else task.due_date
+        days_overdue = (now - task_due_date).days
+        
+        # Obtener modelo del vehículo desde las relaciones
+        asset_model = "Sin modelo"
+        if asset.vehicle_model:
+            model_name = asset.vehicle_model.name if asset.vehicle_model.name else ""
+            brand_name = asset.vehicle_model.brand.name if asset.vehicle_model.brand else ""
+            asset_model = f"{brand_name} {model_name}" if brand_name or model_name else "Sin modelo"
+        
+        reminder_data = {
+            "id": f"overdue_{task.id}",
+            "asset_id": task.asset_id,
+            "maintenance_task_id": task.id,
+            "reminder_type": "overdue",
+            "priority": "critical" if days_overdue > 7 else "high",
+            "title": f"Mantenimiento vencido! - {clean_special_chars(asset.name)}",
+            "message": f"El vehiculo {clean_special_chars(asset.name)} tiene mantenimiento vencido hace {days_overdue} dias. Tarea: {clean_special_chars(task.title)}",
+            "created_at": now.isoformat(),
+            "due_date": task_due_date.isoformat(),
+            "reminded_at": None,
+            "dismissed_at": None,
+            "is_active": True,
+            "is_dismissed": False,
+            "days_before_due": -days_overdue,
+            "asset_name": clean_special_chars(asset.name),
+            "asset_code": asset.asset_code if asset.asset_code else f"AST-{asset.id:03d}",
+            "asset_model": asset_model,
+            "task_title": clean_special_chars(task.title),
+            "task_status": task.status
+        }
+        reminders.append(reminder_data)
+    
+    # Ordenar por prioridad y fecha
+    priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    reminders.sort(key=lambda x: (priority_order.get(x["priority"], 4), x["due_date"]))
+    
+    return {"reminders": reminders}
+
+@router.post("/reminders/refresh")
+def refresh_reminders(db: Session = Depends(get_db)):
+    """
+    Fuerza la actualización de todos los recordatorios basándose en el estado actual de las tareas
+    """
+    try:
+        # Ejecutar la función de actualización dinámica
+        db.execute("SELECT refresh_dynamic_reminders()")
+        db.commit()
+        
+        # Retornar estadísticas actualizadas
+        result = db.execute("SELECT * FROM get_dynamic_reminder_stats()").fetchone()
+        
+        if result:
+            return {
+                "success": True,
+                "message": "Recordatorios actualizados exitosamente",
+                "stats": {
+                    "total_active": result.total_active,
+                    "overdue": result.overdue,
+                    "due_soon": result.due_soon,
+                    "critical_priority": result.critical_priority
+                }
+            }
+        else:
+            return {
+                "success": True,
+                "message": "Recordatorios actualizados (fallback)",
+                "stats": {
+                    "total_active": 0,
+                    "overdue": 0,
+                    "due_soon": 0,
+                    "critical_priority": 0
+                }
+            }
+        
+    except Exception as e:
+        logger.error(f"Error actualizando recordatorios: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error actualizando recordatorios: {str(e)}")

@@ -254,22 +254,24 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE OR REPLACE FUNCTION generate_task_code()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.task_code IS NULL THEN
-        NEW.task_code := 'MT-' || TO_CHAR(CURRENT_DATE, 'YYYY') || '-' || LPAD(extract(epoch from now())::bigint::text, 10, '0');
-    END IF;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- Función para generar códigos de tareas (COMENTADA para evitar duplicados)
+-- CREATE OR REPLACE FUNCTION generate_task_code()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--     IF NEW.task_code IS NULL THEN
+--         NEW.task_code := 'MT-' || TO_CHAR(CURRENT_DATE, 'YYYY') || '-' || LPAD(extract(epoch from now())::bigint::text, 10, '0');
+--     END IF;
+--     RETURN NEW;
+-- END;
+-- $$ language 'plpgsql';
 
 -- Aplicar triggers para códigos únicos
 CREATE TRIGGER generate_asset_code_trigger BEFORE INSERT ON assets 
     FOR EACH ROW EXECUTE FUNCTION generate_asset_code();
 
-CREATE TRIGGER generate_task_code_trigger BEFORE INSERT ON maintenance_tasks 
-    FOR EACH ROW EXECUTE FUNCTION generate_task_code();
+-- Trigger de task_code comentado para evitar duplicados
+-- CREATE TRIGGER generate_task_code_trigger BEFORE INSERT ON maintenance_tasks 
+--     FOR EACH ROW EXECUTE FUNCTION generate_task_code();
 
 -- Función para crear historial automáticamente
 CREATE OR REPLACE FUNCTION create_maintenance_history()
@@ -301,10 +303,10 @@ CREATE TRIGGER maintenance_history_trigger
 
 -- Categorías de activos
 INSERT INTO asset_categories (name, description, color_code) VALUES
-('Vehículos de Carga', 'Camiones, furgones y vehículos de transporte', '#EF4444'),
-('Maquinaria Pesada', 'Grúas, excavadoras, cargadores', '#F97316'),
-('Equipos de Bodega', 'Carretillas, montacargas, equipos de almacén', '#EAB308'),
-('Vehículos de Servicio', 'Vehículos administrativos y de servicios', '#22C55E'),
+('Vehiculos de Carga', 'Camiones, furgones y vehiculos de transporte', '#EF4444'),
+('Maquinaria Pesada', 'Gruas, excavadoras, cargadores', '#F97316'),
+('Equipos de Bodega', 'Carretillas, montacargas, equipos de almacen', '#EAB308'),
+('Vehiculos de Servicio', 'Vehiculos administrativos y de servicios', '#22C55E'),
 ('Herramientas Especializadas', 'Equipos especializados y herramientas', '#6366F1')
 ON CONFLICT (name) DO NOTHING;
 
@@ -314,41 +316,41 @@ INSERT INTO brands (name, country, website) VALUES
 ('Mercedes-Benz', 'Alemania', 'https://www.mercedes-benz.com'),
 ('Scania', 'Suecia', 'https://www.scania.com'),
 ('MAN', 'Alemania', 'https://www.man.eu'),
-('DAF', 'Países Bajos', 'https://www.daf.com'),
+('DAF', 'Paises Bajos', 'https://www.daf.com'),
 ('Iveco', 'Italia', 'https://www.iveco.com'),
 ('Liebherr', 'Alemania', 'https://www.liebherr.com'),
 ('Caterpillar', 'Estados Unidos', 'https://www.caterpillar.com'),
-('Komatsu', 'Japón', 'https://www.komatsu.com'),
+('Komatsu', 'Japon', 'https://www.komatsu.com'),
 ('Clark', 'Estados Unidos', 'https://www.clarkmhc.com')
 ON CONFLICT (name) DO NOTHING;
 
 -- Tipos de vehículos
 INSERT INTO vehicle_types (category_id, name, description, default_maintenance_interval) VALUES
-((SELECT id FROM asset_categories WHERE name = 'Vehículos de Carga'), 'Camión Pesado', 'Camiones de carga superior a 12 toneladas', 15),
-((SELECT id FROM asset_categories WHERE name = 'Vehículos de Carga'), 'Camión Mediano', 'Camiones de carga entre 3.5 y 12 toneladas', 20),
-((SELECT id FROM asset_categories WHERE name = 'Vehículos de Carga'), 'Furgón', 'Vehículos de reparto urbano', 25),
-((SELECT id FROM asset_categories WHERE name = 'Maquinaria Pesada'), 'Grúa Móvil', 'Grúas autopropulsadas', 30),
-((SELECT id FROM asset_categories WHERE name = 'Maquinaria Pesada'), 'Excavadora', 'Equipos de excavación', 25),
+((SELECT id FROM asset_categories WHERE name = 'Vehiculos de Carga'), 'Camion Pesado', 'Camiones de carga superior a 12 toneladas', 15),
+((SELECT id FROM asset_categories WHERE name = 'Vehiculos de Carga'), 'Camion Mediano', 'Camiones de carga entre 3.5 y 12 toneladas', 20),
+((SELECT id FROM asset_categories WHERE name = 'Vehiculos de Carga'), 'Furgon', 'Vehiculos de reparto urbano', 25),
+((SELECT id FROM asset_categories WHERE name = 'Maquinaria Pesada'), 'Grua Movil', 'Gruas autopropulsadas', 30),
+((SELECT id FROM asset_categories WHERE name = 'Maquinaria Pesada'), 'Excavadora', 'Equipos de excavacion', 25),
 ((SELECT id FROM asset_categories WHERE name = 'Equipos de Bodega'), 'Montacargas', 'Equipos de manejo de materiales', 10),
-((SELECT id FROM asset_categories WHERE name = 'Equipos de Bodega'), 'Carretilla Elevadora', 'Equipos de elevación en bodega', 15);
+((SELECT id FROM asset_categories WHERE name = 'Equipos de Bodega'), 'Carretilla Elevadora', 'Equipos de elevacion en bodega', 15);
 
 -- Personal de mantenimiento
 INSERT INTO maintenance_personnel (employee_code, first_name, last_name, email, phone, specializations, certification_level, hourly_rate) VALUES
-('MECH001', 'Juan Carlos', 'Pérez López', 'juan.perez@luxchile.com', '+56912345678', ARRAY['Motores Diesel', 'Sistemas Hidráulicos'], 'expert', 15000),
-('MECH002', 'María Elena', 'González Silva', 'maria.gonzalez@luxchile.com', '+56987654321', ARRAY['Sistemas Eléctricos', 'Diagnóstico'], 'advanced', 12000),
-('MECH003', 'Carlos Alberto', 'Ruiz Morales', 'carlos.ruiz@luxchile.com', '+56911223344', ARRAY['Frenos', 'Suspensión'], 'intermediate', 10000),
-('MECH004', 'Ana Patricia', 'Muñoz Castro', 'ana.munoz@luxchile.com', '+56955667788', ARRAY['Transmisiones', 'Embragues'], 'advanced', 11500),
-('MECH005', 'Roberto José', 'Hernández Vega', 'roberto.hernandez@luxchile.com', '+56933445566', ARRAY['Neumáticos', 'Alineación'], 'basic', 8000);
+('MECH001', 'Juan Carlos', 'Perez Lopez', 'juan.perez@luxchile.com', '+56912345678', ARRAY['Motores Diesel', 'Sistemas Hidraulicos'], 'expert', 15000),
+('MECH002', 'Maria Elena', 'Gonzalez Silva', 'maria.gonzalez@luxchile.com', '+56987654321', ARRAY['Sistemas Electricos', 'Diagnostico'], 'advanced', 12000),
+('MECH003', 'Carlos Alberto', 'Ruiz Morales', 'carlos.ruiz@luxchile.com', '+56911223344', ARRAY['Frenos', 'Suspension'], 'intermediate', 10000),
+('MECH004', 'Ana Patricia', 'Munoz Castro', 'ana.munoz@luxchile.com', '+56955667788', ARRAY['Transmisiones', 'Embragues'], 'advanced', 11500),
+('MECH005', 'Roberto Jose', 'Hernandez Vega', 'roberto.hernandez@luxchile.com', '+56933445566', ARRAY['Neumaticos', 'Alineacion'], 'basic', 8000);
 
 -- Tipos de mantenimiento
 INSERT INTO maintenance_types (name, category, description, estimated_duration, frequency_days, priority_level, cost_estimate) VALUES
-('Mantenimiento Preventivo Básico', 'preventive', 'Revisión general, cambio de fluidos básicos', 4, 30, 3, 150000),
-('Mantenimiento Preventivo Completo', 'preventive', 'Revisión exhaustiva, cambio de filtros y fluidos', 8, 90, 2, 350000),
-('Inspección Técnica', 'preventive', 'Revisión técnica obligatoria', 2, 365, 4, 80000),
-('Reparación de Motor', 'corrective', 'Reparación de componentes del motor', 24, null, 1, 800000),
-('Reparación de Frenos', 'corrective', 'Reparación sistema de frenado', 6, null, 1, 200000),
-('Análisis de Vibraciones', 'predictive', 'Diagnóstico predictivo mediante análisis', 3, 60, 3, 120000),
-('Reparación de Emergencia', 'emergency', 'Reparación urgente en ruta', 4, null, 1, 300000);
+('Mantenimiento Preventivo Basico', 'preventive', 'Revision general, cambio de fluidos basicos', 4, 30, 3, 150000),
+('Mantenimiento Preventivo Completo', 'preventive', 'Revision exhaustiva, cambio de filtros y fluidos', 8, 90, 2, 350000),
+('Inspeccion Tecnica', 'preventive', 'Revision tecnica obligatoria', 2, 365, 4, 80000),
+('Reparacion de Motor', 'corrective', 'Reparacion de componentes del motor', 24, null, 1, 800000),
+('Reparacion de Frenos', 'corrective', 'Reparacion sistema de frenado', 6, null, 1, 200000),
+('Analisis de Vibraciones', 'predictive', 'Diagnostico predictivo mediante analisis', 3, 60, 3, 120000),
+('Reparacion de Emergencia', 'emergency', 'Reparacion urgente en ruta', 4, null, 1, 300000);
 
 -- Algunos repuestos comunes
 INSERT INTO maintenance_parts (part_number, name, brand_id, category, unit_price, stock_quantity, minimum_stock) VALUES
@@ -356,7 +358,7 @@ INSERT INTO maintenance_parts (part_number, name, brand_id, category, unit_price
 ('OF002', 'Aceite Motor 15W40 (20L)', null, 'Lubricantes', 45000, 30, 5),
 ('BK001', 'Pastillas Freno Delanteras', null, 'Frenos', 85000, 20, 5),
 ('BK002', 'Discos Freno Traseros', null, 'Frenos', 120000, 15, 3),
-('TY001', 'Neumático 315/80R22.5', null, 'Neumáticos', 180000, 12, 4),
-('HY001', 'Fluido Hidráulico (20L)', null, 'Lubricantes', 35000, 25, 5);
+('TY001', 'Neumatico 315/80R22.5', null, 'Neumaticos', 180000, 12, 4),
+('HY001', 'Fluido Hidraulico (20L)', null, 'Lubricantes', 35000, 25, 5);
 
 COMMIT;
