@@ -33,6 +33,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
     ],
     # Allow localhost/127.0.0.1 and common LAN ranges on any port
     allow_origin_regex=r"https?://(localhost|127\\.0\\.0\\.1|192\\.168\\.[0-9]+\\.[0-9]+|10\\.[0-9]+\\.[0-9]+\\.[0-9]+|172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]+\\.[0-9]+)(:\\d+)?",
@@ -140,6 +142,95 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# ------------------------------------------------------
+# PROXIES HACIA MS-INVENTARIO (MANTENCIONES)
+# ------------------------------------------------------
+
+@app.get("/api/maintenance/tasks")
+async def get_maintenance_tasks():
+    """Proxy para obtener tareas de mantención desde ms-inventario"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance tasks request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.post("/api/maintenance/tasks")
+async def create_maintenance_task(payload: dict):
+    """Proxy para crear nueva tarea de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario create maintenance task request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.put("/api/maintenance/tasks/{task_id}")
+async def update_maintenance_task(task_id: str, payload: dict):
+    """Proxy para actualizar tarea de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks/{task_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.put(ms_url, json=payload, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario update maintenance task request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/api/maintenance/tasks/stats")
+async def get_maintenance_stats():
+    """Proxy para obtener estadísticas de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks/stats"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance stats request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance stats")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/api/maintenance/assets")
+async def get_maintenance_assets():
+    """Proxy para obtener activos de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/assets"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance assets request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance assets")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
 
 # ------------------------------------------------------
 # PROXIES HACIA MS-LOGISTICA

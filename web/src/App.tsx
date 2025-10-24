@@ -6,6 +6,7 @@ import InventoryPage from './pages/InventoryPage';
 import AlertsPage from './pages/AlertsPage';
 import SecurityPage from './pages/SecurityPage';
 import IncidentsPage from './pages/IncidentsPage';
+import MaintenancePage from './pages/MaintenancePage';
 import './app.css';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
             <li><NavLink to="/alertas">Alertas</NavLink></li>
             <li><NavLink to="/seguridad">Seguridad</NavLink></li>
             <li><NavLink to="/incidentes">Incidentes</NavLink></li>
+            <li><NavLink to="/mantencion">Mantención</NavLink></li>
           </ul>
         </nav>
         <p className="small">Demo: ruteo + inventario + alertas</p>
@@ -32,6 +34,7 @@ export default function App() {
             <Route path="/alertas" element={<AlertsPage />} />
             <Route path="/seguridad" element={<SecurityPage />} />
             <Route path="/incidentes" element={<IncidentsPage />} />
+            <Route path="/mantencion" element={<MaintenancePage />} />
           </Routes>
         </ErrorBoundary>
       </main>
