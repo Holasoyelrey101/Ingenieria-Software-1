@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+pydantic
+pydantic[email]
+alembic
+prometheus-client
+python-dotenv
+structlog
