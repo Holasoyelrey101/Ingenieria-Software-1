@@ -7,6 +7,10 @@ import AlertsPage from './pages/AlertsPage';
 import SecurityPage from './pages/SecurityPage';
 import IncidentsPage from './pages/IncidentsPage';
 import MaintenancePage from './pages/MaintenancePage';
+import CalendarViewPage from './pages/RRHHModule/CalendarViewPage';
+import ConductorsSchedulePage from './pages/RRHHModule/ConductorsSchedulePage';
+import TrainingsPage from './pages/RRHHModule/TrainingsPage';
+import EmployeesPage from './pages/RRHHModule/EmployeesPage';
 import './app.css';
 
 export default function App() {
@@ -22,9 +26,17 @@ export default function App() {
             <li><NavLink to="/seguridad">Seguridad</NavLink></li>
             <li><NavLink to="/incidentes">Incidentes</NavLink></li>
             <li><NavLink to="/mantencion">Mantención</NavLink></li>
+            <li><strong>RR.HH.</strong>
+              <ul style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
+                <li><NavLink to="/empleados">Empleados</NavLink></li>
+                <li><NavLink to="/conductores">Turnos Conductores</NavLink></li>
+                <li><NavLink to="/calendario">Calendario de Turnos</NavLink></li>
+                <li><NavLink to="/capacitaciones">Capacitaciones</NavLink></li>
+              </ul>
+            </li>
           </ul>
         </nav>
-        <p className="small">Demo: ruteo + inventario + alertas</p>
+        <p className="small">Demo: ruteo + inventario + alertas + RR.HH.</p>
       </aside>
       <main className="main">
         <ErrorBoundary>
@@ -35,6 +47,10 @@ export default function App() {
             <Route path="/seguridad" element={<SecurityPage />} />
             <Route path="/incidentes" element={<IncidentsPage />} />
             <Route path="/mantencion" element={<MaintenancePage />} />
+            <Route path="/calendario" element={<CalendarViewPage />} />
+            <Route path="/conductores" element={<ConductorsSchedulePage />} />
+            <Route path="/capacitaciones" element={<TrainingsPage />} />
+            <Route path="/empleados" element={<EmployeesPage />} />
           </Routes>
         </ErrorBoundary>
       </main>

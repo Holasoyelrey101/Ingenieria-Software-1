@@ -237,14 +237,19 @@ export default function MapView() {
     <div style={{ display: 'flex', height: '100%' }}>
       <div style={{ width: 360, padding: 12, boxSizing: 'border-box' }}>
         <div style={{ marginBottom: '10px' }}>
-          <button onClick={addVehicle}>Agregar Vehículo</button>
+          <button 
+            onClick={addVehicle}
+            className="px-4 py-2 bg-blue-600 text-white rounded border border-blue-700 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Agregar Vehículo
+          </button>
           {vehicles.length > 0 && (
             <select 
               id="vehicle-select"
               name="vehicle"
               value={selectedVehicle || ''} 
               onChange={(e) => setSelectedVehicle(e.target.value)}
-              style={{ marginLeft: '10px' }}
+              className="ml-2.5 px-3 py-2 border border-gray-300 rounded"
             >
               <option value="">Seleccionar vehículo...</option>
               {vehicles.map(v => (
@@ -288,7 +293,7 @@ export default function MapView() {
           <button 
             onClick={computeRoute} 
             disabled={!originPlace || !destPlace || !selectedVehicle}
-            style={{ marginTop: '10px' }}
+            className="px-4 py-2 bg-blue-600 text-white rounded border border-blue-700 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed mt-2.5"
           >
             Calcular ruta
           </button>

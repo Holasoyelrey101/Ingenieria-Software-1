@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_API_URL?: string
   readonly VITE_API_LOGISTICA?: string
   readonly VITE_API_INVENTARIO?: string
+  readonly VITE_API_RRHH?: string
 }
 
 interface ImportMeta {
