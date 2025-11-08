@@ -8,3 +8,4 @@ alembic
 prometheus-client
 python-dotenv
 structlog
+httpx

@@ -268,6 +268,10 @@ export default function MapView() {
     loadDriversFromDB()
   }
 
+  const addIntermediateStop = () => {
+    setIntermediateStops([...intermediateStops, null as any])
+  }
+
   const removeIntermediateStop = (index: number) => {
     setIntermediateStops(intermediateStops.filter((_, i) => i !== index))
   }
