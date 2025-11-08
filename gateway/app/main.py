@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Security, Request
 from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
 import httpx  # type: ignore[reportMissingImports]
 import os
@@ -9,6 +10,7 @@ import json
 import traceback
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from .auth import (
     create_access_token,
     decode_token,
@@ -18,6 +20,7 @@ from .auth import (
 )
 from .db import SessionLocal, engine
 from . import models
+from .delivery_routes import router as delivery_router
 
 # ------------------------------------------------------
 # CONFIGURACIÓN INICIAL
@@ -47,6 +50,17 @@ app.add_middleware(
 REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
 
 security = HTTPBearer()
+
+# Middleware para garantizar UTF-8 en todas las respuestas
+class UTF8Middleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Asegurar que todas las respuestas JSON tengan charset=utf-8
+        if response.headers.get('content-type', '').startswith('application/json'):
+            response.headers['content-type'] = 'application/json; charset=utf-8'
+        return response
+
+app.add_middleware(UTF8Middleware)
 
 # ------------------------------------------------------
 # MANEJO GLOBAL DE ERRORES
@@ -382,8 +396,129 @@ def get_route_request(request_id: int, db: Session = Depends(get_db)):
     }
 
 # ------------------------------------------------------
+# ENDPOINT PARA CONDUCTORES ACTIVOS (MS-RRHH)
+# ------------------------------------------------------
+
+@app.get("/api/drivers/active")
+async def get_active_drivers(db: Session = Depends(get_db)):
+    """
+    Obtiene conductores activos desde la tabla employees (ms-rrhh)
+    Retorna: Lista de conductores con role_id relacionado a 'Conductor'
+    """
+    try:
+        # Query directo a PostgreSQL - tabla employees
+        query = text("""
+            SELECT 
+                e.id,
+                e.rut,
+                e.nombre,
+                e.email,
+                e.activo,
+                e.role_id,
+                r.nombre as role_name
+            FROM employees e
+            LEFT JOIN roles r ON e.role_id = r.id
+            WHERE e.activo = TRUE
+            AND (r.nombre ILIKE '%conductor%' OR r.nombre ILIKE '%driver%' OR e.role_id IN (
+                SELECT id FROM roles WHERE nombre IN ('Conductor', 'Driver', 'Chofer')
+            ))
+            ORDER BY e.nombre
+        """)
+        result = db.execute(query)
+        drivers = []
+        for row in result:
+            drivers.append({
+                "id": row[0],
+                "rut": row[1],
+                "nombre": row[2],
+                "email": row[3],
+                "activo": row[4],
+                "role_id": row[5],
+                "role_name": row[6] if len(row) > 6 else None
+            })
+        
+        logging.info(f"✓ Conductores activos encontrados: {len(drivers)}")
+        return {"drivers": drivers, "count": len(drivers)}
+    
+    except Exception as e:
+        logging.error(f"❌ Error al obtener conductores: {e}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error al consultar conductores: {str(e)}")
+
+
+@app.post("/api/routes/assign")
+async def assign_route_to_driver(payload: dict, db: Session = Depends(get_db)):
+    """
+    Registra asignación de ruta a conductor en delivery_requests
+    Payload: {
+        "driver_id": 1,
+        "driver_name": "Juan Pérez",
+        "origin": "...",
+        "destination": "...",
+        "route_data": { polyline, distance, duration }
+    }
+    """
+    try:
+        from sqlalchemy import text
+        driver_id = payload.get("driver_id")
+        driver_name = payload.get("driver_name")
+        origin = payload.get("origin")
+        destination = payload.get("destination")
+        route_data = payload.get("route_data", {})
+        
+        if not driver_id or not origin or not destination:
+            raise HTTPException(status_code=400, detail="Faltan campos requeridos: driver_id, origin, destination")
+        
+        # Insertar en delivery_requests usando columnas correctas de la tabla
+        insert_query = text("""
+            INSERT INTO delivery_requests 
+                (customer_name, origin_address, destination_address, driver_id, status)
+            VALUES 
+                (:customer, :origin, :destination, :driver_id, :status)
+            RETURNING id, created_at
+        """)
+        
+        result = db.execute(insert_query, {
+            "customer": f"Ruta - {driver_name}",
+            "origin": origin,
+            "destination": destination,
+            "driver_id": driver_id,
+            "status": "assigned"
+        })
+        db.commit()
+        
+        row = result.fetchone()
+        request_id = row[0]
+        created_at = row[1]
+        tracking_number = f"RT-{request_id:06d}"
+        
+        logging.info(f"✓ Ruta asignada ID: {request_id}, Conductor: {driver_name} (ID: {driver_id}), Tracking: {tracking_number}")
+        
+        return {
+            "success": True,
+            "request_id": request_id,
+            "tracking_number": tracking_number,
+            "driver_id": driver_id,
+            "driver_name": driver_name,
+            "created_at": created_at.isoformat() if created_at else None,
+            "message": f"Ruta asignada a {driver_name}"
+        }
+    
+    except Exception as e:
+        db.rollback()
+        logging.error(f"❌ Error al asignar ruta: {e}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error al asignar ruta: {str(e)}")
+
+
+# ------------------------------------------------------
 # IMPORTACIÓN DE RUTAS ADICIONALES (HU11, HU12, ETC.)
 # ------------------------------------------------------
+
+# Incluir router de entregas (Trazabilidad) - DEBE SER PRIMERO
+logging.info("Incluyendo delivery_router...")
+app.include_router(delivery_router)
+logging.info("✅ Módulo de entregas (Trazabilidad/UTF-8) cargado correctamente.")
 
 try:
     from . import reportes  # HU11 y HU12
