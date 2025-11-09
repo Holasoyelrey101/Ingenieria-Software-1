@@ -1,0 +1,95 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <title>Vista Cámara - HLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:24px}
+    h1{font-size:32px;margin-top:0}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+    input,select,button{padding:8px 10px;font-size:14px}
+    video{width:100%;max-width:860px;background:#000;border-radius:8px}
+    small{color:#666}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.14/dist/hls.min.js"></script>
+</head>
+<body>
+  <h1>Vista Cámara (HLS)</h1>
+
+  <div class="row">
+    <label>camId:&nbsp;<input id="camId" value="cam1" style="width:180px"></label>
+    <button id="btnPlayDirect">▶️ Reproducir directo (HLS)</button>
+  </div>
+
+  <div class="row">
+    <button id="btnLoadList">📡 Cargar desde Gateway (/camaras/list)</button>
+    <select id="selCams" style="min-width:240px"><option>(sin cargar)</option></select>
+    <button id="btnPlaySelected">▶️ Reproducir selección</button>
+  </div>
+
+  <video id="player" controls muted playsinline></video>
+  <p><small>Si no ves imagen en unos segundos, revisa logs de <code>mediamtx</code> y <code>test-pub</code>.</small></p>
+
+  <script>
+    // Ajusta esto si tu gateway corre en otro host/puerto
+    const API_BASE = "http://localhost:8000";
+    const DIRECT_HLS_BASE = "http://localhost:8888";
+
+    const $ = (id)=>document.getElementById(id);
+    const player = $("player");
+
+    function playHls(url){
+      if (Hls.isSupported()) {
+        const hls = new Hls({lowLatencyMode:true});
+        hls.loadSource(url);
+        hls.attachMedia(player);
+        hls.on(Hls.Events.MANIFEST_PARSED, ()=>player.play().catch(()=>{}));
+      } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+        player.src = url;
+        player.addEventListener('loadedmetadata', ()=>player.play().catch(()=>{}));
+      } else {
+        alert("Tu navegador no soporta HLS.");
+      }
+    }
+
+    $("btnPlayDirect").onclick = ()=>{
+      const camId = $("camId").value.trim();
+      if(!camId) return alert("Ingresa camId");
+      const url = `${DIRECT_HLS_BASE}/${encodeURIComponent(camId)}/index.m3u8`;
+      playHls(url);
+    };
+
+    $("btnLoadList").onclick = async ()=>{
+      try{
+        const res = await fetch(`${API_BASE}/camaras/list`, {credentials:"omit"});
+        if(!res.ok) throw new Error("HTTP "+res.status);
+        const data = await res.json();
+        const sel = $("selCams");
+        sel.innerHTML = "";
+        data.forEach((c)=>{
+          const opt = document.createElement("option");
+          opt.value = c.hls;
+          opt.textContent = `${c.id}  —  ${c.hls}`;
+          sel.appendChild(opt);
+        });
+        if (data.length===0) {
+          const opt = document.createElement("option");
+          opt.textContent = "(vacío)";
+          sel.appendChild(opt);
+        }
+        alert("Listado cargado desde gateway.");
+      }catch(e){
+        console.error(e);
+        alert("Error consultando /camaras/list");
+      }
+    };
+
+    $("btnPlaySelected").onclick = ()=>{
+      const sel = $("selCams");
+      if(!sel.value) return alert("Selecciona una cámara");
+      playHls(sel.value);
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+﻿hlsAlwaysRemux: yes
+paths:
+  cam1:
+    source: publisher
+  cam2:
+    source: publisher

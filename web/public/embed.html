@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Route Viewer (Embed)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+3kGk6s7bGk7kGqD1HqgVbQm7Q1qQmY5xMJvC3S+I=" crossorigin="" />
+  <style>
+    html,body,#map { height: 100%; margin: 0; padding: 0; }
+    .info { position: absolute; top: 8px; left: 8px; background: rgba(255,255,255,0.9); padding: 6px 8px; border-radius: 4px; z-index: 400; font-family: Arial, sans-serif; font-size: 13px }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="info" id="info">Cargando...</div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-Dv9x5OJtTnQ78s8v+q1Hk1Kc2QiUQi1b2xLw5i8wYgk=" crossorigin=""></script>
+  <script>
+    console.log('Embed page loaded.');
+
+    if(!location.search){
+      document.getElementById('info').textContent = 'No se proporcionaron parámetros en la URL.';
+      console.error('No query parameters provided in embed URL.');
+    }
+
+    function decodePolyline(encoded){
+      if(!encoded) return [];
+      var index = 0, lat = 0, lng = 0, coordinates = [];
+      while (index < encoded.length) {
+        var b, shift = 0, result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        var dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+        shift = 0; result = 0;
+        do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        var dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+        coordinates.push([lat / 1e5, lng / 1e5]);
+      }
+      return coordinates;
+    }
+
+    function qs(name){
+      var params = new URLSearchParams(location.search);
+      return params.get(name);
+    }
+
+    function parseCoords(param){
+      if(!param) return null;
+      const parts = param.split(',').map(s => parseFloat(s.trim()));
+      if(parts.length===2 && !isNaN(parts[0]) && !isNaN(parts[1])) return parts;
+      return null;
+    }
+
+    var poly = qs('polyline') || qs('p') || '';
+    var encoded = decodeURIComponent(poly || '');
+    var coords = decodePolyline(encoded);
+
+    var originParam = qs('origin');
+    var destParam = qs('dest');
+    var originCoords = parseCoords(originParam);
+    var destCoords = parseCoords(destParam);
+
+    var map = L.map('map');
+    if(coords && coords.length>0){
+      var bounds = L.latLngBounds(coords);
+      map.fitBounds(bounds, { padding: [20,20] });
+    } else {
+      map.setView([0,0], 2);
+    }
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    if(coords && coords.length>0){
+      var polyline = L.polyline(coords, { color: '#1976D2', weight: 4 }).addTo(map);
+      var start = coords[0];
+      var end = coords[coords.length-1];
+      L.marker(start).addTo(map).bindPopup('Origen').openPopup();
+      L.marker(end).addTo(map).bindPopup('Destino');
+      document.getElementById('info').textContent = 'Ruta mostrada. Zoom/pan para explorar.';
+    } else if((!poly || poly==='') && originCoords && destCoords) {
+      // No polyline provided but origin/dest parameters exist, so set route as markers only.
+      coords = [originCoords, destCoords];
+      document.getElementById('info').textContent = 'Mostrando origen y destino sin ruta.';
+      // Add markers later in the code
+      window.addEventListener('load', function(){
+        L.marker(originCoords).addTo(map).bindPopup('Origen').openPopup();
+        L.marker(destCoords).addTo(map).bindPopup('Destino');
+      });
+    } else {
+      document.getElementById('info').textContent = 'No se encontró ruta en los parámetros.';
+    }
+
+    // Debug logging added in embed.html
+    console.log('Query string:', location.search);
+    console.log('poly:', qs('polyline'));
+    console.log('origin:', qs('origin'));
+    console.log('dest:', qs('dest'));
+  </script>
+</body>
+</html>

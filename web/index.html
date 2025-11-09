@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LuxChile ERP - Frontend</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Quick JS-check: write a visible message to #root so we can tell if JS executes at all -->
+    <script>
+      try { document.getElementById('root').innerText = 'JS loaded — reloading app...'; } catch(e) {}
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

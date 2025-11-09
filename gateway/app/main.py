@@ -1,0 +1,422 @@
+from fastapi import FastAPI, Depends, HTTPException, Security, Request
+from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST  # type: ignore[reportMissingImports]
+import httpx  # type: ignore[reportMissingImports]
+import os
+import json
+import traceback
+import logging
+from sqlalchemy.orm import Session
+
+from .auth import (
+    create_access_token,
+    decode_token,
+    verify_password,
+    generate_totp,
+    verify_totp,
+)
+from .db import SessionLocal, engine
+from . import models
+
+# ------------------------------------------------------
+# CONFIGURACIÓN INICIAL
+# ------------------------------------------------------
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+app = FastAPI(title="Gateway LuxChile ERP")
+
+# CORS (entorno local/frontend Vite)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ],
+    # localhost/127.0.0.1 y rangos LAN en cualquier puerto
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]+\.[0-9]+)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Métricas Prometheus
+REQUESTS = Counter("gateway_requests_total", "Total gateway HTTP requests")
+security = HTTPBearer()
+
+# ------------------------------------------------------
+# MANEJO GLOBAL DE ERRORES
+# ------------------------------------------------------
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    logging.error("Unhandled exception: %s", str(exc))
+    logging.error(tb)
+    show_trace = os.environ.get("DEV", "1") == "1"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "internal_server_error",
+            "error": str(exc),
+            "trace": tb if show_trace else None,
+        },
+    )
+
+# ------------------------------------------------------
+# AUTENTICACIÓN Y SEGURIDAD
+# ------------------------------------------------------
+
+def get_current_user(token: HTTPAuthorizationCredentials = Security(security)):
+    try:
+        payload = decode_token(token.credentials)
+        return payload
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+def rbac(required_roles: list):
+    def checker(user=Depends(get_current_user)):
+        roles = user.get("roles", [])
+        if not any(r in roles for r in required_roles):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return user
+    return checker
+
+
+@app.post("/auth/token")
+async def token(form_data: OAuth2PasswordRequestForm = Depends()):
+    # Ejemplo simple; en producción se valida contra la base de datos
+    if form_data.username == "admin" and form_data.password == "admin":
+        token = create_access_token(subject=form_data.username, extra={"roles": ["admin"]})
+        return {"access_token": token, "token_type": "bearer"}
+    raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+
+@app.post("/auth/totp/setup")
+async def totp_setup(user=Depends(get_current_user)):
+    return generate_totp()
+
+
+@app.post("/auth/totp/verify")
+async def totp_verify(code: str, user=Depends(get_current_user)):
+    secret = user.get("totp_secret")
+    if not secret:
+        raise HTTPException(status_code=400, detail="no totp configured")
+    ok = verify_totp(secret, code)
+    return {"ok": ok}
+
+# ------------------------------------------------------
+# MÉTRICAS Y SALUD DEL SERVICIO
+# ------------------------------------------------------
+
+@app.get("/health")
+async def health():
+    REQUESTS.inc()
+    return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics():
+    data = generate_latest()
+    return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
+# ------------------------------------------------------
+# BASE DE DATOS
+# ------------------------------------------------------
+
+try:
+    models.Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logging.error("Could not create DB tables at startup: %s", str(e))
+    logging.debug("DB create_all exception", exc_info=True)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ------------------------------------------------------
+# PROXIES HACIA MS-INVENTARIO (MANTENCIONES)
+# ------------------------------------------------------
+
+@app.get("/api/maintenance/tasks")
+async def get_maintenance_tasks():
+    """Proxy para obtener tareas de mantención desde ms-inventario"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance tasks request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.post("/api/maintenance/tasks")
+async def create_maintenance_task(payload: dict):
+    """Proxy para crear nueva tarea de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario create maintenance task request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.put("/api/maintenance/tasks/{task_id}")
+async def update_maintenance_task(task_id: str, payload: dict):
+    """Proxy para actualizar tarea de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks/{task_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.put(ms_url, json=payload, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario update maintenance task request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/api/maintenance/tasks/stats")
+async def get_maintenance_stats():
+    """Proxy para obtener estadísticas de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/tasks/stats}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance stats request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance stats")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/api/maintenance/assets")
+async def get_maintenance_assets():
+    """Proxy para obtener activos de mantención"""
+    base = os.environ.get("MS_INVENTARIO_URL") or "http://127.0.0.1:8002"
+    ms_url = f"{base}/maintenance/assets"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-inventario maintenance assets request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_inventario_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-inventario maintenance assets")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+# ------------------------------------------------------
+# PROXIES HACIA MS-LOGISTICA
+# ------------------------------------------------------
+
+@app.post("/maps/geocode")
+async def maps_geocode(payload: dict):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/maps/geocode" if base else "http://127.0.0.1:8001/maps/geocode"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=20)
+        content = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica geocode request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error when contacting ms-logistica geocode")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+
+@app.post("/maps/directions")
+async def maps_directions(payload: dict, request: Request, db: Session = Depends(get_db)):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/maps/directions" if base else "http://127.0.0.1:8001/maps/directions"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=30)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica directions request failed: %s", str(e))
+        # Registro local del fallo (best effort)
+        try:
+            rr = models.RouteRequest(
+                origin=json.dumps(payload.get("origin"), ensure_ascii=False),
+                destination=json.dumps(payload.get("destination"), ensure_ascii=False),
+                payload=json.dumps(payload, ensure_ascii=False),
+                response=str(e),
+                status="error:ms_unreachable",
+            )
+            db.add(rr)
+            db.commit()
+        except Exception:
+            logging.debug("Failed to persist failed route request", exc_info=True)
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+
+    except Exception as e:
+        logging.exception("Unexpected error contacting ms-logistica directions")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+    # Procesar respuesta
+    body_text = r.text
+    origin = payload.get("origin")
+    destination = payload.get("destination")
+
+    # Persistir la solicitud (best-effort)
+    try:
+        rr = models.RouteRequest(
+            origin=origin,
+            destination=destination,
+            payload=json.dumps(payload, ensure_ascii=False),
+            response=body_text,
+            status="ok" if r.status_code == 200 else f"error:{r.status_code}",
+        )
+        db.add(rr)
+        db.commit()
+        db.refresh(rr)
+    except Exception:
+        logging.debug("warning: failed to persist route request", exc_info=True)
+
+    try:
+        content = r.json()
+    except Exception:
+        content = {"raw_text": body_text}
+    return JSONResponse(status_code=r.status_code, content=content)
+
+# ------------------------------------------------------
+# ADMINISTRACIÓN DE RUTAS REGISTRADAS Y PROXY DE RUTAS
+# ------------------------------------------------------
+
+@app.post("/routes/optimize")
+async def proxy_routes_optimize(payload: dict):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/routes/optimize" if base else "http://127.0.0.1:8001/routes/optimize"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(ms_url, json=payload, timeout=30)
+        try:
+            content = r.json()
+        except Exception:
+            content = {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica optimize request failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error contacting ms-logistica optimize")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/routes/{route_id}")
+async def proxy_routes_get(route_id: int):
+    base = os.environ.get("MS_LOGISTICA_URL") or os.environ.get("MS_LOGISTICA_BASE")
+    ms_url = f"{base}/routes/{route_id}" if base else f"http://127.0.0.1:8001/routes/{route_id}"
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(ms_url, timeout=20)
+        try:
+            content = r.json()
+        except Exception:
+            content = {"raw_text": r.text}
+        return JSONResponse(status_code=r.status_code, content=content)
+    except httpx.RequestError as e:
+        logging.error("ms-logistica get route failed: %s", str(e))
+        return JSONResponse(status_code=502, content={"error": "ms_logistica_unreachable", "detail": str(e)})
+    except Exception as e:
+        logging.exception("Unexpected error contacting ms-logistica get route")
+        return JSONResponse(status_code=500, content={"error": "internal_proxy_error", "detail": str(e)})
+
+@app.get("/admin/route-requests")
+def list_route_requests(limit: int = 100, db: Session = Depends(get_db)):
+    items = db.query(models.RouteRequest).order_by(models.RouteRequest.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": i.id,
+            "origin": i.origin,
+            "destination": i.destination,
+            "status": i.status,
+            "created_at": (lambda dt: dt.isoformat() if dt is not None else None)(getattr(i, "created_at", None)),
+        }
+        for i in items
+    ]
+
+
+@app.get("/admin/route-requests/{request_id}")
+def get_route_request(request_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.RouteRequest).filter(models.RouteRequest.id == request_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="not found")
+    return {
+        "id": item.id,
+        "origin": item.origin,
+        "destination": item.destination,
+        "payload": item.payload,
+        "response": item.response,
+        "status": item.status,
+        "created_at": (lambda dt: dt.isoformat() if dt is not None else None)(getattr(item, "created_at", None)),
+    }
+
+# ------------------------------------------------------
+# HU6: CÁMARAS  (router estático y claro, sin loaders raros)
+# ------------------------------------------------------
+
+try:
+    from .routers.camaras_router import router as camaras_router
+    app.include_router(camaras_router)
+    logging.info("✅ Router de cámaras montado desde app/routers/camaras_router.py")
+except Exception as e:
+    logging.warning(f"🟡 No se pudo montar camaras_router: {e}")
+    # Fallback mínimo para no romper el servicio
+    from fastapi import APIRouter, HTTPException
+    MTX_PUBLIC_URL = os.getenv("MTX_PUBLIC_URL", "http://localhost:8888")
+    _CAM_LIST = [p.strip() for p in os.getenv("CAM_PATHS", "cam1").split(",") if p.strip()]
+    cam_fallback = APIRouter(prefix="/camaras", tags=["camaras"])
+
+    @cam_fallback.get("/list")
+    def _list_cam_fallback():
+        return [{"id": cam,
+                 "hls": f"{MTX_PUBLIC_URL}/{cam}/index.m3u8",
+                 "thumbnail": f"{MTX_PUBLIC_URL}/{cam}/thumb.jpg"} for cam in _CAM_LIST]
+
+    @cam_fallback.get("/hls/{cam_id}")
+    def _hls_cam_fallback(cam_id: str):
+        if cam_id not in _CAM_LIST:
+            raise HTTPException(status_code=404, detail="camera_not_found")
+        return {"hls": f"{MTX_PUBLIC_URL}/{cam_id}/index.m3u8"}
+
+    app.include_router(cam_fallback)
+    logging.info("🟡 Módulo de cámaras montado en modo fallback")
+
+# ------------------------------------------------------
+# IMPORTACIÓN DE RUTAS ADICIONALES (HU11, HU12, …)
+# ------------------------------------------------------
+try:
+    from . import reportes  # HU11/HU12
+    app.include_router(reportes.router)
+    logging.info("✅ Módulo de reportes (HU11/HU12) cargado correctamente.")
+except Exception as e:
+    logging.warning(f"No se pudo importar el módulo de reportes: {e}")
