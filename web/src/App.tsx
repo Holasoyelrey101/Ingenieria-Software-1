@@ -11,6 +11,7 @@ import CalendarViewPage from './pages/RRHHModule/CalendarViewPage';
 import ConductorsSchedulePage from './pages/RRHHModule/ConductorsSchedulePage';
 import TrainingsPage from './pages/RRHHModule/TrainingsPage';
 import EmployeesPage from './pages/RRHHModule/EmployeesPage';
+import CamarasPage from './pages/CamarasPage';
 import './app.css';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
           <ul>
             <li><NavLink to="/" end>Rutas</NavLink></li>
             <li><NavLink to="/inventario">Inventario</NavLink></li>
+            <li><NavLink to="/camaras">Cámaras</NavLink></li>
             <li><NavLink to="/alertas">Alertas</NavLink></li>
             <li><NavLink to="/seguridad">Seguridad</NavLink></li>
             <li><NavLink to="/incidentes">Incidentes</NavLink></li>
@@ -43,6 +45,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<MapView />} />
             <Route path="/inventario" element={<InventoryPage />} />
+            <Route path="/camaras" element={<CamarasPage />} />
             <Route path="/alertas" element={<AlertsPage />} />
             <Route path="/seguridad" element={<SecurityPage />} />
             <Route path="/incidentes" element={<IncidentsPage />} />

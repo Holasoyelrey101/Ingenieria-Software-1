@@ -241,7 +241,9 @@ export type EmployeeTrainingCreate = {
 export async function getTrainings(): Promise<Training[]> {
   const res = await safeFetch(`${API_RRHH}/trainings`);
   if (!res.ok) throw new Error('Error al cargar entrenamientos');
-  return res.json();
+  const data = await res.json();
+  // El backend retorna { trainings: [...], total: number }
+  return data.trainings || data || [];
 }
 
 export async function createTraining(data: TrainingCreate): Promise<Training> {
@@ -262,7 +264,9 @@ export async function deleteTraining(id: number): Promise<void> {
 export async function getEmployeeTrainings(employeeId: number): Promise<EmployeeTraining[]> {
   const res = await safeFetch(`${API_RRHH}/employees/${employeeId}/trainings`);
   if (!res.ok) throw new Error('Error al cargar entrenamientos del empleado');
-  return res.json();
+  const data = await res.json();
+  // El backend retorna { employee_id: number, trainings: [...], total: number }
+  return data.trainings || data || [];
 }
 
 export async function assignTraining(data: EmployeeTrainingCreate): Promise<EmployeeTraining> {

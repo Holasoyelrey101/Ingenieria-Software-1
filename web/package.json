@@ -13,6 +13,7 @@
     "@emotion/styled": "^11.14.1",
     "@react-google-maps/api": "^2.16.0",
     "axios": "^1.4.0",
+    "hls.js": "^1.5.8",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

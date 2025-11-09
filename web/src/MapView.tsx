@@ -658,7 +658,7 @@ export default function MapView() {
             disabled={!originPlace || !destPlace || !selectedDriver || isLoading}
             className="px-4 py-2 bg-blue-600 text-white rounded border border-blue-700 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed mt-2.5 w-full"
           >
-            {isLoading ? '⏳ Calculando...' : '🚀 Calcular Ruta'}
+            {isLoading ? 'Calculando...' : 'Calcular Ruta'}
           </button>
 
           {/* Botón para confirmar y guardar ruta */}

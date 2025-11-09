@@ -21,6 +21,7 @@ from .auth import (
 from .db import SessionLocal, engine
 from . import models
 from .delivery_routes import router as delivery_router
+from .routers.camaras import router as camaras_router
 
 # ------------------------------------------------------
 # CONFIGURACIÓN INICIAL
@@ -1286,6 +1287,224 @@ async def get_weekly_suggestions(db: Session = Depends(get_db)):
 
 
 # ------------------------------------------------------
+# CAPACITACIONES (TRAININGS)
+# ------------------------------------------------------
+
+@app.get("/api/rrhh/trainings")
+async def list_trainings(db: Session = Depends(get_db)):
+    """
+    Lista todas las capacitaciones disponibles
+    Trazabilidad: trainings → employee_trainings → employees
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 
+                t.id,
+                t.title,
+                t.topic,
+                t.required,
+                t.created_at,
+                COUNT(DISTINCT et.employee_id) as enrolled_employees
+            FROM trainings t
+            LEFT JOIN employee_trainings et ON t.id = et.training_id
+            GROUP BY t.id, t.title, t.topic, t.required, t.created_at
+            ORDER BY t.created_at DESC
+        """))
+        
+        trainings = []
+        for row in result:
+            trainings.append({
+                "id": row[0],
+                "title": row[1],
+                "topic": row[2],
+                "required": row[3],
+                "created_at": row[4].isoformat() if row[4] else None,
+                "enrolled_employees": row[5]
+            })
+        
+        return {"trainings": trainings, "total": len(trainings)}
+    
+    except Exception as e:
+        logging.error(f"❌ Error al listar capacitaciones: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/rrhh/trainings", status_code=201)
+async def create_training(
+    title: str,
+    topic: str = "",
+    required: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Crea una nueva capacitación
+    """
+    try:
+        result = db.execute(text("""
+            INSERT INTO trainings (title, topic, required, created_at)
+            VALUES (:title, :topic, :required, NOW())
+            RETURNING id, title, topic, required, created_at
+        """), {
+            "title": title,
+            "topic": topic,
+            "required": required
+        })
+        db.commit()
+        
+        training = result.fetchone()
+        return {
+            "id": training[0],
+            "title": training[1],
+            "topic": training[2],
+            "required": training[3],
+            "created_at": training[4].isoformat() if training[4] else None,
+            "message": "Capacitación creada exitosamente"
+        }
+    
+    except Exception as e:
+        db.rollback()
+        logging.error(f"❌ Error al crear capacitación: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/rrhh/trainings/{training_id}/enroll/{employee_id}")
+async def enroll_employee(training_id: int, employee_id: int, db: Session = Depends(get_db)):
+    """
+    Inscribe un empleado en una capacitación
+    Trazabilidad: employee → employee_trainings → training
+    """
+    try:
+        # Verificar que el empleado y la capacitación existan
+        employee = db.execute(text("SELECT id, nombre FROM employees WHERE id = :id"), {"id": employee_id}).fetchone()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+        
+        training = db.execute(text("SELECT id, title FROM trainings WHERE id = :id"), {"id": training_id}).fetchone()
+        if not training:
+            raise HTTPException(status_code=404, detail="Capacitación no encontrada")
+        
+        # Verificar si ya está inscrito
+        existing = db.execute(text("""
+            SELECT id FROM employee_trainings 
+            WHERE employee_id = :emp_id AND training_id = :train_id
+        """), {"emp_id": employee_id, "train_id": training_id}).fetchone()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="El empleado ya está inscrito en esta capacitación")
+        
+        # Inscribir
+        result = db.execute(text("""
+            INSERT INTO employee_trainings (employee_id, training_id, date, status, instructor)
+            VALUES (:emp_id, :train_id, CURRENT_DATE, 'ENROLLED', 'Sistema')
+            RETURNING id, date, status
+        """), {"emp_id": employee_id, "train_id": training_id})
+        db.commit()
+        
+        enrollment = result.fetchone()
+        return {
+            "id": enrollment[0],
+            "employee_id": employee_id,
+            "employee_name": employee[1],
+            "training_id": training_id,
+            "training_title": training[1],
+            "date": enrollment[1].isoformat() if enrollment[1] else None,
+            "status": enrollment[2],
+            "message": f"Empleado {employee[1]} inscrito en {training[1]}"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"❌ Error al inscribir empleado: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/rrhh/trainings/{training_id}/employees")
+async def get_training_employees(training_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene los empleados inscritos en una capacitación
+    Trazabilidad: training → employee_trainings → employees
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 
+                e.id,
+                e.nombre,
+                e.email,
+                et.date,
+                et.status,
+                et.instructor,
+                et.certificate_url
+            FROM employee_trainings et
+            INNER JOIN employees e ON et.employee_id = e.id
+            WHERE et.training_id = :training_id
+            ORDER BY et.date DESC
+        """), {"training_id": training_id})
+        
+        employees = []
+        for row in result:
+            employees.append({
+                "id": row[0],
+                "nombre": row[1],
+                "email": row[2],
+                "date": row[3].isoformat() if row[3] else None,
+                "status": row[4],
+                "instructor": row[5],
+                "certificate_url": row[6]
+            })
+        
+        return {"training_id": training_id, "employees": employees, "total": len(employees)}
+    
+    except Exception as e:
+        logging.error(f"❌ Error al obtener empleados de capacitación: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/rrhh/employees/{employee_id}/trainings")
+async def get_employee_trainings(employee_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene las capacitaciones de un empleado
+    Trazabilidad: employee → employee_trainings → trainings
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 
+                t.id,
+                t.title,
+                t.topic,
+                t.required,
+                et.date,
+                et.status,
+                et.instructor,
+                et.certificate_url
+            FROM employee_trainings et
+            INNER JOIN trainings t ON et.training_id = t.id
+            WHERE et.employee_id = :employee_id
+            ORDER BY et.date DESC
+        """), {"employee_id": employee_id})
+        
+        trainings = []
+        for row in result:
+            trainings.append({
+                "id": row[0],
+                "title": row[1],
+                "topic": row[2],
+                "required": row[3],
+                "date": row[4].isoformat() if row[4] else None,
+                "status": row[5],
+                "instructor": row[6],
+                "certificate_url": row[7]
+            })
+        
+        return {"employee_id": employee_id, "trainings": trainings, "total": len(trainings)}
+    
+    except Exception as e:
+        logging.error(f"❌ Error al obtener capacitaciones del empleado: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------
 # MÓDULO DE SEGURIDAD E INCIDENTES
 # ------------------------------------------------------
 
@@ -1546,6 +1765,11 @@ async def get_delivery_requests(db: Session = Depends(get_db)):
 logging.info("Incluyendo delivery_router...")
 app.include_router(delivery_router)
 logging.info("✅ Módulo de entregas (Trazabilidad/UTF-8) cargado correctamente.")
+
+# Incluir router de cámaras (HU6)
+logging.info("Incluyendo camaras_router...")
+app.include_router(camaras_router, prefix="/api", tags=["camaras"])
+logging.info("✅ Módulo de cámaras (HU6) cargado correctamente.")
 
 try:
     from . import reportes  # HU11 y HU12

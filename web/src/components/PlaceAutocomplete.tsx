@@ -323,12 +323,6 @@ const PlaceAutocomplete = React.memo(({
           </SuggestionsBox>
         )}
       </SearchContainer>
-      <HelperNote>
-        🚀 Búsqueda Inteligente: Autocompletado + Lugares Cercanos | 
-        API: {googleMapsApiKey ? '✓' : '✗'} | 
-        {loading && ' 🔍 Buscando...'} 
-        | Encuentra KFC, Carl's Jr, Metros y más
-      </HelperNote>
       {error && <ErrorMessage>{error}</ErrorMessage>}
     </div>
   );
