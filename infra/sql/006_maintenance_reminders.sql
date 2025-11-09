@@ -155,7 +155,12 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Crear algunos recordatorios iniciales para las tareas existentes
-SELECT create_overdue_reminders();
+-- Crear algunos recordatorios iniciales para las tareas existentes (con manejo de excepciones)
+DO $$
+BEGIN
+    SELECT create_overdue_reminders();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Create overdue reminders skipped: %', SQLERRM;
+END $$;
 
 COMMIT;

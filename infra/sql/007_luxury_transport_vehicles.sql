@@ -4,70 +4,90 @@
 -- en transporte seguro de articulos de alto valor
 -- ======================================================
 
--- Limpiar datos existentes
-DELETE FROM maintenance_reminders;
-DELETE FROM maintenance_task_parts;
-DELETE FROM maintenance_history;
-DELETE FROM maintenance_tasks;
-DELETE FROM assets;
-DELETE FROM vehicle_models;
+-- Limpiar datos existentes (con manejo de excepciones)
+DO $$
+BEGIN
+    DELETE FROM maintenance_reminders;
+    DELETE FROM maintenance_task_parts;
+    DELETE FROM maintenance_history;
+    DELETE FROM maintenance_tasks;
+    DELETE FROM assets;
+    DELETE FROM vehicle_models;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Delete operations skipped: %', SQLERRM;
+END $$;
 
--- Actualizar categorias de activos para transporte de lujo
-UPDATE asset_categories SET 
-    name = 'Vehiculos Blindados de Carga',
-    description = 'Camiones y furgones blindados para transporte seguro de objetos de lujo y alto valor'
-WHERE name = 'Vehiculos de Carga';
+-- Actualizar categorias de activos para transporte de lujo (con manejo de excepciones)
+DO $$
+BEGIN
+    UPDATE asset_categories SET 
+        name = 'Vehiculos Blindados de Carga',
+        description = 'Camiones y furgones blindados para transporte seguro de objetos de lujo y alto valor'
+    WHERE name = 'Vehiculos de Carga';
 
-UPDATE asset_categories SET 
-    name = 'Equipos de Seguridad Especializada',
-    description = 'Montacargas blindados y equipos especializados para manejo seguro'
-WHERE name = 'Equipos de Bodega';
+    UPDATE asset_categories SET 
+        name = 'Equipos de Seguridad Especializada',
+        description = 'Montacargas blindados y equipos especializados para manejo seguro'
+    WHERE name = 'Equipos de Bodega';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Update asset categories skipped: %', SQLERRM;
+END $$;
 
--- Modelos de vehiculos especializados en transporte de lujo
-INSERT INTO vehicle_models (brand_id, vehicle_type_id, name, year_from, year_to, engine_type, fuel_type, specifications) VALUES
-(
-    (SELECT id FROM brands WHERE name = 'Volvo'), 
-    (SELECT id FROM vehicle_types WHERE name = 'Camion Pesado'), 
-    'FH16 SecureTransport', 
-    2020, 2025, 'D16K750 Blindado', 'Diesel', 
-    '{"potencia": "750 HP", "torque": "3550 Nm", "blindaje": "Nivel 3", "camaras": "360 grados 4K", "gps_tracking": "Anti-jamming", "compartimento": "Temperatura controlada"}'
-),
-(
-    (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
-    (SELECT id FROM vehicle_types WHERE name = 'Camion Pesado'), 
-    'Actros SecureCargo', 
-    2021, 2025, 'OM471LA Reforzado', 'Diesel', 
-    '{"potencia": "510 HP", "torque": "2500 Nm", "blindaje": "Nivel 2", "camaras": "Perimetrales HD", "alarma": "Silenciosa", "compartimento": "Anti-robo"}'
-),
-(
-    (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
-    (SELECT id FROM vehicle_types WHERE name = 'Furgon'), 
-    'Sprinter LuxSecure', 
-    2022, 2025, 'OM651 Blindado', 'Diesel', 
-    '{"potencia": "190 HP", "blindaje": "Nivel 1", "camaras": "Interior/Exterior", "biometria": "Acceso restringido", "clima": "Controlado"}'
-),
-(
-    (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
-    (SELECT id FROM vehicle_types WHERE name = 'Furgon'), 
-    'EQS SecureLux Electric', 
-    2023, 2025, 'Electric Blindado', 'Electrico', 
-    '{"potencia": "450 HP", "bateria": "Blindada 108kWh", "camaras": "AI-Enhanced", "anti_interferencia": "Activa", "autonomia": "400km blindado"}'
-),
-(
-    (SELECT id FROM brands WHERE name = 'Clark'), 
-    (SELECT id FROM vehicle_types WHERE name = 'Montacargas'), 
-    'C25D SecureLifting', 
-    2023, 2025, 'Nissan K25 Reforzado', 'Diesel', 
-    '{"capacidad": "2.5 ton", "blindaje": "Ligero", "camaras": "360 grados", "sensores": "Anti-vibracion", "certificacion": "Objetos fragiles"}'
-);
+-- Modelos de vehiculos especializados en transporte de lujo (con manejo de excepciones)
+BEGIN;
 
--- Activos especializados en transporte de lujo con camaras de seguridad
-INSERT INTO assets (
-    name, vehicle_model_id, serial_number, license_plate, vin_number, 
-    location, status, acquisition_date, warranty_end_date, purchase_price, 
-    current_value, mileage, engine_hours, next_inspection_date, insurance_policy,
-    notes, asset_metadata
-) VALUES
+DO $$
+BEGIN
+    INSERT INTO vehicle_models (brand_id, vehicle_type_id, name, year_from, year_to, engine_type, fuel_type, specifications) VALUES
+    (
+        (SELECT id FROM brands WHERE name = 'Volvo'), 
+        (SELECT id FROM vehicle_types WHERE name = 'Camion Pesado'), 
+        'FH16 SecureTransport', 
+        2020, 2025, 'D16K750 Blindado', 'Diesel', 
+        '{"potencia": "750 HP", "torque": "3550 Nm", "blindaje": "Nivel 3", "camaras": "360 grados 4K", "gps_tracking": "Anti-jamming", "compartimento": "Temperatura controlada"}'
+    ),
+    (
+        (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
+        (SELECT id FROM vehicle_types WHERE name = 'Camion Pesado'), 
+        'Actros SecureCargo', 
+        2021, 2025, 'OM471LA Reforzado', 'Diesel', 
+        '{"potencia": "510 HP", "torque": "2500 Nm", "blindaje": "Nivel 2", "camaras": "Perimetrales HD", "alarma": "Silenciosa", "compartimento": "Anti-robo"}'
+    ),
+    (
+        (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
+        (SELECT id FROM vehicle_types WHERE name = 'Furgon'), 
+        'Sprinter LuxSecure', 
+        2022, 2025, 'OM651 Blindado', 'Diesel', 
+        '{"potencia": "190 HP", "blindaje": "Nivel 1", "camaras": "Interior/Exterior", "biometria": "Acceso restringido", "clima": "Controlado"}'
+    ),
+    (
+        (SELECT id FROM brands WHERE name = 'Mercedes-Benz'), 
+        (SELECT id FROM vehicle_types WHERE name = 'Furgon'), 
+        'EQS SecureLux Electric', 
+        2023, 2025, 'Electric Blindado', 'Electrico', 
+        '{"potencia": "450 HP", "bateria": "Blindada 108kWh", "camaras": "AI-Enhanced", "anti_interferencia": "Activa", "autonomia": "400km blindado"}'
+    ),
+    (
+        (SELECT id FROM brands WHERE name = 'Clark'), 
+        (SELECT id FROM vehicle_types WHERE name = 'Montacargas'), 
+        'C25D SecureLifting', 
+        2023, 2025, 'Nissan K25 Reforzado', 'Diesel', 
+        '{"capacidad": "2.5 ton", "blindaje": "Ligero", "camaras": "360 grados", "sensores": "Anti-vibracion", "certificacion": "Objetos fragiles"}'
+    )
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Vehicle models insert skipped: %', SQLERRM;
+END $$;
+
+-- Activos especializados en transporte de lujo con camaras de seguridad (con manejo de excepciones)
+DO $$
+BEGIN
+    INSERT INTO assets (
+        name, vehicle_model_id, serial_number, license_plate, vin_number, 
+        location, status, acquisition_date, warranty_end_date, purchase_price, 
+        current_value, mileage, engine_hours, next_inspection_date, insurance_policy,
+        notes, asset_metadata
+    ) VALUES
 (
     'Camion Blindado Volvo FH-001 SecureTransport',
     (SELECT id FROM vehicle_models WHERE name = 'FH16 SecureTransport'),
@@ -219,6 +239,10 @@ INSERT INTO assets (
     'POL-BLINDADO-2022-001',
     'Camion blindado pesado para transporte de obras de arte y objetos de extremo valor. Compartimento criogenico.',
     '{"blindaje": "pesado_nivel_4", "compartimento": "criogenico", "arte": "certificado_internacional", "seguridad": "maxima", "mantenimiento": "sistemas_criogenicos"}'
-);
+    )
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Assets insert skipped: %', SQLERRM;
+END $$;
 
 COMMIT;

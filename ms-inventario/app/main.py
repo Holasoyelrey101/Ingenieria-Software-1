@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from app.routers import inventario, movimientos, alerts, export, maintenance
+from app.allocation_service import router as allocation_router
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request
 from app.db import engine, Base
 from app import models
 import os
@@ -19,6 +22,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware para garantizar UTF-8 en todas las respuestas
+class UTF8Middleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Asegurar que todas las respuestas JSON tengan charset=utf-8
+        if response.headers.get('content-type', '').startswith('application/json'):
+            response.headers['content-type'] = 'application/json; charset=utf-8'
+        return response
+
+app.add_middleware(UTF8Middleware)
 
 # Crear todas las tablas al iniciar la aplicación
 @app.on_event("startup")
@@ -47,3 +61,4 @@ app.include_router(movimientos.router, prefix="", tags=["movimientos"])
 app.include_router(alerts.router, prefix="", tags=["alerts"]) 
 app.include_router(export.router, prefix="/export", tags=["export"])  # HU12
 app.include_router(maintenance.router, prefix="", tags=["maintenance"])  # HU7
+app.include_router(allocation_router, tags=["delivery-allocations"])

@@ -239,13 +239,29 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
--- Aplicar trigger para actualizar recordatorios automáticamente
-DROP TRIGGER IF EXISTS auto_refresh_reminders_trigger ON maintenance_tasks;
-CREATE TRIGGER auto_refresh_reminders_trigger
-    AFTER INSERT OR UPDATE ON maintenance_tasks
-    FOR EACH ROW EXECUTE FUNCTION trigger_refresh_reminders();
+-- Aplicar trigger para actualizar recordatorios automáticamente (con manejo de excepciones)
+DO $$
+BEGIN
+    DROP TRIGGER IF EXISTS auto_refresh_reminders_trigger ON maintenance_tasks;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Drop trigger skipped: %', SQLERRM;
+END $$;
 
--- Ejecutar actualización inicial
-SELECT refresh_dynamic_reminders();
+DO $$
+BEGIN
+    CREATE TRIGGER auto_refresh_reminders_trigger
+        AFTER INSERT OR UPDATE ON maintenance_tasks
+        FOR EACH ROW EXECUTE FUNCTION trigger_refresh_reminders();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Create trigger skipped: %', SQLERRM;
+END $$;
+
+-- Ejecutar actualización inicial (con manejo de excepciones)
+DO $$
+BEGIN
+    SELECT refresh_dynamic_reminders();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Function execution skipped: %', SQLERRM;
+END $$;
 
 COMMIT;

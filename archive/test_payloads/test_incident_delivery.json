@@ -1,0 +1,8 @@
+{
+    "delivery_request_id": 5,
+    "vehicle_id": 1,
+    "driver_id": 1,
+    "severity": "medium",
+    "type": "delay",
+    "description": "Tráfico intenso en ruta hacia OXXO Santiago"
+}

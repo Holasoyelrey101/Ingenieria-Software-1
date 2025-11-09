@@ -1,7 +1,6 @@
 const API_LOG =
-  import.meta.env.VITE_API_LOGISTICA ||
   import.meta.env.VITE_API_URL ||
-  `${location.protocol}//${location.hostname}:8001`;
+  `${location.protocol}//${location.hostname}:8000`;  // ✅ Usar Gateway en lugar de ms-logistica
 
 export type DeliveryRequest = {
   id: number;

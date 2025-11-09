@@ -6,14 +6,32 @@ services:
       POSTGRES_USER: lux
       POSTGRES_PASSWORD: luxpass
       POSTGRES_DB: erp
-      LANG: en_US.UTF-8
-      LC_ALL: en_US.UTF-8
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      LC_CTYPE: C.UTF-8
+      LC_COLLATE: C.UTF-8
+      LC_MESSAGES: C.UTF-8
+      LC_MONETARY: C.UTF-8
+      LC_NUMERIC: C.UTF-8
+      LC_TIME: C.UTF-8
       PGCLIENTENCODING: UTF8
     ports: ["5432:5432"]
     volumes:
       - db:/var/lib/postgresql/data
       # Auto-init schema and seeds on first run
       - ./sql:/docker-entrypoint-initdb.d:ro
+    command:
+      - "postgres"
+      - "-c"
+      - "client_encoding=UTF8"
+      - "-c"
+      - "default_text_search_config=pg_catalog.simple"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lux -d erp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   pgadmin:
     image: dpage/pgadmin4
@@ -25,8 +43,10 @@ services:
 
   gateway:
     build: ../gateway
-    env_file: ../.env.sample
-    depends_on: [postgres]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports: ["8000:8000"]
     environment:
       DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
@@ -40,8 +60,10 @@ services:
 
   ms-inventario:
     build: ../ms-inventario
-    env_file: ../.env.sample
-    depends_on: [postgres]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
     ports:
@@ -49,16 +71,19 @@ services:
     healthcheck:
       test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 15s
+      retries: 10
+      start_period: 10s
 
 
   ms-logistica:
     build: ../ms-logistica
     env_file:
-      - ../.env.sample
+      - ../.env
       - ../web/.env
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
       # Optional: enable Google APIs in ms-logistica when key is provided
@@ -69,13 +94,16 @@ services:
     healthcheck:
       test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 15s
+      retries: 10
+      start_period: 10s
 
   ms-rrhh:
     build: ../ms-rrhh
-    env_file: ../.env.sample
-    depends_on: [postgres]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: "postgresql+psycopg2://lux:luxpass@postgres:5432/erp"
     ports: ["8003:8000"]
@@ -83,8 +111,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 15s
+      retries: 10
+      start_period: 20s
 
   web:
     build: ../web
@@ -97,7 +126,9 @@ services:
       VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     ports:
       - "8080:80"
-    depends_on: [gateway]
+    depends_on:
+      gateway:
+        condition: service_healthy
 
 volumes:
   db:

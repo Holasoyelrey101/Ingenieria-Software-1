@@ -88,8 +88,8 @@ async def geocode(req: AddressRequest):
             # Append country if missing
             if "chile" not in base.lower():
                 variants.append(f"{base}, Chile")
-            # Remove common punctuation/symbols (#, N°, etc.)
-            cleaned = re.sub(r"[#°º]", " ", base)
+            # Remove common punctuation/symbols (#, NÂ°, etc.)
+            cleaned = re.sub(r"[#Â°Âº]", " ", base)
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
             if cleaned != base:
                 variants.append(cleaned)

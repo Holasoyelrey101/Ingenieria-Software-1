@@ -1,6 +1,10 @@
 -- 006_rrhh_seed.sql
+-- -*- coding: utf-8 -*-
 -- Seed data for RRHH module: predefined shifts for a logistics company
 -- A logistics company works 24/7 with 3 standard shifts
+-- Encoding: UTF8
+
+SET client_encoding = 'UTF8';
 
 BEGIN;
 

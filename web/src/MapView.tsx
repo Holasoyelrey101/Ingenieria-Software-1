@@ -110,36 +110,40 @@ export default function MapView() {
   // Estado para el panel de información de lugares
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null)
   const [selectedPlaceData, setSelectedPlaceData] = useState<any>(null)
+  // Estado para ruta pendiente de confirmación
+  const [pendingRoute, setPendingRoute] = useState<any>(null)
+  const [confirmingRoute, setConfirmingRoute] = useState(false)
   
   // Cargar conductores desde la BD al iniciar
   const loadDriversFromDB = async () => {
     try {
       setLoadingDrivers(true)
-      console.log('🔄 Cargando conductores desde PostgreSQL...')
-      const res = await axios.get(`${API_URL}/api/drivers/active`)
+      console.log('🔄 Cargando empleados desde PostgreSQL...')
+      const res = await axios.get(`${API_URL}/api/rrhh/employees`)
       
-      if (res.data && res.data.drivers) {
-        const dbDrivers: Driver[] = res.data.drivers.map((d: any) => ({
+      if (res.data && Array.isArray(res.data)) {
+        const dbDrivers: Driver[] = res.data.map((d: any) => ({
           id: d.id,
           nombre: d.nombre,
           email: d.email,
           role_id: d.role_id,
           activo: d.activo,
           rut: d.rut,
-          role_name: d.role_name
+          role_name: d.role_name || 'Empleado'
         }))
         
         setDrivers(dbDrivers)
-        console.log(`✓ Conductores cargados: ${dbDrivers.length}`)
+        console.log(`✅ Empleados cargados: ${dbDrivers.length}`, dbDrivers)
         
-        // Si hay conductores, seleccionar el primero por defecto
+        // Si hay empleados, seleccionar el primero por defecto
         if (dbDrivers.length > 0 && !selectedDriver) {
           setSelectedDriver(dbDrivers[0].id)
+          console.log(`✅ Empleado seleccionado por defecto: ${dbDrivers[0].nombre} (ID: ${dbDrivers[0].id})`)
         }
       }
     } catch (err: any) {
-      console.error('❌ Error al cargar conductores:', err)
-      setError(`Error al cargar conductores: ${err.message}`)
+      console.error('❌ Error al cargar empleados:', err)
+      setError(`Error al cargar empleados: ${err.message}`)
     } finally {
       setLoadingDrivers(false)
     }
@@ -288,6 +292,74 @@ export default function MapView() {
     setIntermediateStops(newStops)
   }
 
+  // Función para confirmar y guardar la ruta en BD + RR.HH.
+  const confirmRoute = async () => {
+    if (!pendingRoute) {
+      setError('No hay ruta pendiente para confirmar')
+      return
+    }
+
+    try {
+      setConfirmingRoute(true)
+      console.log('💾 Confirmando y guardando ruta en PostgreSQL...')
+      
+      const assignPayload = {
+        driver_id: pendingRoute.driver_id,
+        driver_name: pendingRoute.driver_name,
+        origin: pendingRoute.origin,
+        destination: pendingRoute.destination,
+        route_data: {
+          polyline: pendingRoute.polyline,
+          distance_m: pendingRoute.distance_m,
+          duration_s: pendingRoute.duration_s,
+          waypoints: pendingRoute.waypoints
+        }
+      }
+      
+      const assignRes = await axios.post(API_URL + '/api/routes/assign', assignPayload)
+      
+      if (assignRes.data.success) {
+        console.log('✅ Ruta confirmada y guardada:', assignRes.data.tracking_number)
+        
+        // Intentar sincronizar con RR.HH. (dinámico)
+        try {
+          const rrhhPayload = {
+            tracking_number: assignRes.data.tracking_number,
+            driver_id: pendingRoute.driver_id,
+            driver_name: pendingRoute.driver_name,
+            route_data: {
+              origin: pendingRoute.origin,
+              destination: pendingRoute.destination,
+              distance_m: pendingRoute.distance_m,
+              duration_s: pendingRoute.duration_s,
+              estimated_start: new Date().toISOString()
+            }
+          }
+          
+          await axios.post(API_URL + '/api/rrhh/sync-route', rrhhPayload)
+          console.log('✅ Sincronizado con RR.HH.')
+        } catch (rrhhError) {
+          console.warn('⚠️ No se pudo sincronizar con RR.HH. (servicio no disponible)', rrhhError)
+          // No es error crítico - continuar
+        }
+        
+        // Limpiar ruta pendiente
+        setPendingRoute(null)
+        setError(null)
+        alert(`✅ Ruta confirmada exitosamente!\nTracking: ${assignRes.data.tracking_number}`)
+      }
+    } catch (dbError: any) {
+      console.error('❌ Error al confirmar ruta:', dbError)
+      const dbErrorMsg = dbError?.response?.data?.detail 
+        || dbError?.response?.data?.message 
+        || dbError.message 
+        || 'Error al guardar en base de datos'
+      setError(`Error al confirmar ruta: ${dbErrorMsg}`)
+    } finally {
+      setConfirmingRoute(false)
+    }
+  }
+
   const computeRoute = async () => {
     setError(null)
     
@@ -419,35 +491,21 @@ export default function MapView() {
       setRequests([newRequest, ...requests])
       console.log('✓ Solicitud guardada en frontend:', newRequest)
 
-      // ✅ REGISTRAR EN BASE DE DATOS (Trazabilidad)
-      try {
-        console.log('💾 Guardando asignación en PostgreSQL...')
-        const assignPayload = {
-          driver_id: currentDriver.id,
-          driver_name: currentDriver.nombre,
-          origin: originPlace.formatted_address,
-          destination: destPlace.formatted_address,
-          route_data: {
-            polyline: res.data.polyline,
-            distance_m: routeInfo.distance_m,
-            duration_s: routeInfo.duration_s,
-            waypoints: allWaypoints
-          }
-        }
-        
-        const assignRes = await axios.post(API_URL + '/api/routes/assign', assignPayload)
-        if (assignRes.data.success) {
-          console.log('✅ Asignación registrada en BD:', assignRes.data.tracking_number)
-          setError(null) // Limpiar errores previos
-        }
-      } catch (dbError: any) {
-        console.error('❌ Error al guardar en BD:', dbError)
-        const dbErrorMsg = dbError?.response?.data?.detail 
-          || dbError?.response?.data?.message 
-          || dbError.message 
-          || 'Error al guardar en base de datos'
-        setError(`⚠️ Ruta calculada pero no se guardó en BD: ${dbErrorMsg}`)
-      }
+      // ✅ GUARDAR TEMPORALMENTE PARA CONFIRMACIÓN
+      // Guardar datos de la ruta calculada para el botón "Aceptar Ruta"
+      setPendingRoute({
+        driver_id: currentDriver.id,
+        driver_name: currentDriver.nombre,
+        origin: originPlace.formatted_address,
+        destination: destPlace.formatted_address,
+        distance_m: routeInfo.distance_m,
+        duration_s: routeInfo.duration_s,
+        polyline: res.data.polyline,
+        waypoints: allWaypoints
+      })
+
+      console.log('📋 Ruta calculada y lista para confirmar')
+      setError(null) // Limpiar errores previos
 
     } catch(e:any) {
       console.error('❌ Error al calcular ruta:', e)
@@ -603,6 +661,34 @@ export default function MapView() {
             {isLoading ? '⏳ Calculando...' : '🚀 Calcular Ruta'}
           </button>
 
+          {/* Botón para confirmar y guardar ruta */}
+          {pendingRoute && (
+            <button 
+              onClick={confirmRoute} 
+              disabled={confirmingRoute}
+              className="px-4 py-2 bg-green-600 text-white rounded border border-green-700 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed mt-2.5 w-full"
+              style={{ marginTop: '10px' }}
+            >
+              {confirmingRoute ? '⏳ Guardando...' : '✅ Aceptar y Guardar Ruta'}
+            </button>
+          )}
+
+          {pendingRoute && (
+            <div style={{
+              fontSize: '11px',
+              background: '#d4edda',
+              padding: '8px',
+              borderRadius: '4px',
+              marginTop: '10px',
+              border: '1px solid #c3e6cb',
+              color: '#155724'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>✓ Ruta calculada - Lista para confirmar</div>
+              <div>📏 {(pendingRoute.distance_m / 1000).toFixed(2)} km</div>
+              <div>⏱️ {Math.round(pendingRoute.duration_s / 60)} minutos</div>
+            </div>
+          )}
+
           {/* Panel de estado */}
           <div style={{ 
             fontSize: '11px', 
@@ -657,7 +743,7 @@ export default function MapView() {
           <div style={{ maxHeight: '200px', overflow: 'auto' }}>
             {requests.map((req, index) => (
               <div key={index} style={{ padding: '10px', borderBottom: '1px solid #eee' }}>
-                <div><strong>Vehículo:</strong> {vehicles.find(v => v.id === req.vehicleId)?.name || req.vehicleId}</div>
+                <div><strong>Conductor:</strong> {drivers.find(d => d.id === parseInt(req.vehicleId.replace('DRIVER-', '')))?.nombre || req.vehicleId}</div>
                 <div><strong>Origen:</strong> {req.origin}</div>
                 <div><strong>Destino:</strong> {req.destination}</div>
                 <div><strong>Estado:</strong> {req.status}</div>

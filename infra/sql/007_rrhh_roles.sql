@@ -1,6 +1,7 @@
 -- 007_rrhh_roles.sql
 -- Esquema de Roles, Contratos, y Turnos Dinámicos para LuxChile
 -- Soporta: Turnos fijos + Turnos dinámicos de camioneros con validación de conducción
+-- Nota: Este script es complementario a 005_rrhh_schema.sql con manejo robusto de excepciones
 
 BEGIN;
 
@@ -14,13 +15,18 @@ CREATE TABLE IF NOT EXISTS contract_types (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
-INSERT INTO contract_types (nombre, descripcion) VALUES
-('Tiempo Completo', 'Empleado de tiempo completo con turnos fijos'),
-('Por Viaje', 'Conductor pago por viaje completado'),
-('Freelance', 'Contratista independiente'),
-('Jornada Parcial', 'Medio tiempo'),
-('Temporal', 'Contrato temporal o por proyecto')
-ON CONFLICT DO NOTHING;
+DO $$
+BEGIN
+    INSERT INTO contract_types (nombre, descripcion) VALUES
+    ('Tiempo Completo', 'Empleado de tiempo completo con turnos fijos'),
+    ('Por Viaje', 'Conductor pago por viaje completado'),
+    ('Freelance', 'Contratista independiente'),
+    ('Jornada Parcial', 'Medio tiempo'),
+    ('Temporal', 'Contrato temporal o por proyecto')
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Contract types insert skipped: %', SQLERRM;
+END $$;
 
 -- ============================================
 -- 2. ROLES
@@ -34,16 +40,21 @@ CREATE TABLE IF NOT EXISTS roles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
-INSERT INTO roles (nombre, descripcion, is_dynamic_shifts, requires_pairing) VALUES
-('Conductor', 'Conductor de camión con turnos dinámicos por ruta', TRUE, FALSE),
-('Asistente de Carga', 'Ayudante de conductor (co-piloto)', TRUE, TRUE),
-('Custodia de Valores', 'Escolta de seguridad en rutas de alto valor', TRUE, FALSE),
-('Operario Almacén', 'Personal de almacén con turnos fijos', FALSE, FALSE),
-('Supervisor Almacén', 'Supervisor de bodega con turnos flexibles', FALSE, FALSE),
-('Vigilante Bodega', 'Vigilancia 24/7 de bodegas', FALSE, FALSE),
-('Administrativo', 'Personal administrativo/oficina', FALSE, FALSE),
-('Mecánico Flota', 'Mantenimiento de vehículos', FALSE, FALSE)
-ON CONFLICT DO NOTHING;
+DO $$
+BEGIN
+    INSERT INTO roles (nombre, descripcion, is_dynamic_shifts, requires_pairing) VALUES
+    ('Conductor', 'Conductor de camión con turnos dinámicos por ruta', TRUE, FALSE),
+    ('Asistente de Carga', 'Ayudante de conductor (co-piloto)', TRUE, TRUE),
+    ('Custodia de Valores', 'Escolta de seguridad en rutas de alto valor', TRUE, FALSE),
+    ('Operario Almacén', 'Personal de almacén con turnos fijos', FALSE, FALSE),
+    ('Supervisor Almacén', 'Supervisor de bodega con turnos flexibles', FALSE, FALSE),
+    ('Vigilante Bodega', 'Vigilancia 24/7 de bodegas', FALSE, FALSE),
+    ('Administrativo', 'Personal administrativo/oficina', FALSE, FALSE),
+    ('Mecánico Flota', 'Mantenimiento de vehículos', FALSE, FALSE)
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Roles insert skipped: %', SQLERRM;
+END $$;
 
 -- ============================================
 -- 3. SHIFT PROFILES (Perfiles de turno por rol)
@@ -59,12 +70,17 @@ CREATE TABLE IF NOT EXISTS shift_profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
-INSERT INTO shift_profiles (nombre, role_id, descripcion, is_flexible, auto_assign, min_coverage) VALUES
-('Conductor Estándar', (SELECT id FROM roles WHERE nombre='Conductor'), 'Conductor con turnos dinámicos por ruta', TRUE, TRUE, 1),
-('Operario Almacén Turno', (SELECT id FROM roles WHERE nombre='Operario Almacén'), 'Personal almacén turnos fijos', FALSE, TRUE, 3),
-('Vigilante 24/7', (SELECT id FROM roles WHERE nombre='Vigilante Bodega'), 'Vigilancia continua', FALSE, TRUE, 2),
-('Administrativo Oficina', (SELECT id FROM roles WHERE nombre='Administrativo'), 'Personal administrativo', FALSE, TRUE, 1)
-ON CONFLICT DO NOTHING;
+DO $$
+BEGIN
+    INSERT INTO shift_profiles (nombre, role_id, descripcion, is_flexible, auto_assign, min_coverage) VALUES
+    ('Conductor Estándar', (SELECT id FROM roles WHERE nombre='Conductor'), 'Conductor con turnos dinámicos por ruta', TRUE, TRUE, 1),
+    ('Operario Almacén Turno', (SELECT id FROM roles WHERE nombre='Operario Almacén'), 'Personal almacén turnos fijos', FALSE, TRUE, 3),
+    ('Vigilante 24/7', (SELECT id FROM roles WHERE nombre='Vigilante Bodega'), 'Vigilancia continua', FALSE, TRUE, 2),
+    ('Administrativo Oficina', (SELECT id FROM roles WHERE nombre='Administrativo'), 'Personal administrativo', FALSE, TRUE, 1)
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Shift profiles insert skipped: %', SQLERRM;
+END $$;
 
 -- ============================================
 -- 4. SHIFT PROFILE SHIFTS (Turnos predefinidos)
@@ -76,22 +92,32 @@ CREATE TABLE IF NOT EXISTS shift_profile_shifts (
     UNIQUE(profile_id, shift_id)
 );
 
--- Asignar turnos fijos a perfiles
-INSERT INTO shift_profile_shifts (profile_id, shift_id)
-SELECT sp.id, s.id 
-FROM shift_profiles sp
-CROSS JOIN shifts s
-WHERE sp.nombre = 'Operario Almacén Turno'
-ON CONFLICT DO NOTHING;
+-- Asignar turnos fijos a perfiles (con manejo de excepciones)
+DO $$
+BEGIN
+    INSERT INTO shift_profile_shifts (profile_id, shift_id)
+    SELECT sp.id, s.id 
+    FROM shift_profiles sp
+    CROSS JOIN shifts s
+    WHERE sp.nombre = 'Operario Almacén Turno'
+    ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Shift profile shifts insert skipped: %', SQLERRM;
+END $$;
 
 -- ============================================
--- 5. MODIFICAR TABLA EMPLOYEES
+-- 5. MODIFICAR TABLA EMPLOYEES (Si no existen)
 -- ============================================
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS role_id INT REFERENCES roles(id);
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_type_id INT REFERENCES contract_types(id);
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS shift_profile_id INT REFERENCES shift_profiles(id);
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS vehicle_id INT;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS paired_employee_id INT REFERENCES employees(id);
+DO $$
+BEGIN
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS role_id INT REFERENCES roles(id);
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_type_id INT REFERENCES contract_types(id);
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS shift_profile_id INT REFERENCES shift_profiles(id);
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS vehicle_id INT;
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS paired_employee_id INT REFERENCES employees(id);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Employees ALTER TABLE skipped: %', SQLERRM;
+END $$;
 
 -- ============================================
 -- 6. DYNAMIC SHIFTS (Turnos dinámicos de rutas)
@@ -138,14 +164,19 @@ CREATE TABLE IF NOT EXISTS driving_logs (
 );
 
 -- ============================================
--- 9. ÍNDICES PARA PERFORMANCE
+-- 9. ÍNDICES PARA PERFORMANCE (Con manejo de excepciones)
 -- ============================================
-CREATE INDEX IF NOT EXISTS ix_employees_role_id ON employees(role_id);
-CREATE INDEX IF NOT EXISTS ix_employees_contract_type_id ON employees(contract_type_id);
-CREATE INDEX IF NOT EXISTS ix_dynamic_shifts_fecha ON dynamic_shifts(fecha_programada);
-CREATE INDEX IF NOT EXISTS ix_dynamic_shifts_status ON dynamic_shifts(status);
-CREATE INDEX IF NOT EXISTS ix_dynamic_shift_assignments_employee_id ON dynamic_shift_assignments(employee_id);
-CREATE INDEX IF NOT EXISTS ix_dynamic_shift_assignments_dynamic_shift_id ON dynamic_shift_assignments(dynamic_shift_id);
-CREATE INDEX IF NOT EXISTS ix_driving_logs_employee_date ON driving_logs(employee_id, fecha);
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS ix_employees_role_id ON employees(role_id);
+    CREATE INDEX IF NOT EXISTS ix_employees_contract_type_id ON employees(contract_type_id);
+    CREATE INDEX IF NOT EXISTS ix_dynamic_shifts_fecha ON dynamic_shifts(fecha_programada);
+    CREATE INDEX IF NOT EXISTS ix_dynamic_shifts_status ON dynamic_shifts(status);
+    CREATE INDEX IF NOT EXISTS ix_dynamic_shift_assignments_employee_id ON dynamic_shift_assignments(employee_id);
+    CREATE INDEX IF NOT EXISTS ix_dynamic_shift_assignments_dynamic_shift_id ON dynamic_shift_assignments(dynamic_shift_id);
+    CREATE INDEX IF NOT EXISTS ix_driving_logs_employee_date ON driving_logs(employee_id, fecha);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Index creation skipped: %', SQLERRM;
+END $$;
 
 COMMIT;

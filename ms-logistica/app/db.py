@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Load config.env from repo root if present
@@ -32,9 +32,23 @@ def _create_engine(url: str):
 
 try:
     engine = _create_engine(DATABASE_URL)
+    
+    # Event listener para garantizar encoding en cada conexión PostgreSQL
+    @event.listens_for(engine, "connect")
+    def receive_connect(dbapi_conn, connection_record):
+        try:
+            if DATABASE_URL.startswith('postgresql') or DATABASE_URL.startswith('postgres'):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("SET client_encoding to UTF8")
+                cursor.close()
+        except Exception:
+            # La opción de conexión ya debería garantizar UTF8
+            pass
+    
     SessionLocal = sessionmaker(bind=engine, autoflush=False)
 except Exception:
     # fallback to sqlite development DB in ms-logistica folder
     fallback = os.getenv('FALLBACK_SQLITE', 'sqlite:///./dev_ms_logistica.db')
     engine = _create_engine(fallback)
     SessionLocal = sessionmaker(bind=engine, autoflush=False)
+

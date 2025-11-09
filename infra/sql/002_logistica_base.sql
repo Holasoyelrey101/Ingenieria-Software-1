@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     id SERIAL PRIMARY KEY,
     code VARCHAR(64) UNIQUE NOT NULL,
     capacity_kg INTEGER,
+    status VARCHAR(20) DEFAULT 'active',
     active BOOLEAN DEFAULT TRUE
 );
 
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS route_assignments (
     route_id INT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
     vehicle_id INT REFERENCES vehicles(id),
     driver_id INT REFERENCES drivers(id),
+    status VARCHAR(30) DEFAULT 'assigned',
     assigned_at TIMESTAMPTZ DEFAULT now()
 );
 

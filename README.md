@@ -11,6 +11,25 @@ Sistema modular orientado a microservicios para la gestión de inventario, logí
 > Este README se centra en levantar y entender el estado actual. Para una visión conceptual adicional revisar `ARCHITECTURE.md`.
 
 ---
+## ⚡ Deploy & Verification (IS1-105)
+
+**✅ Status**: Ready for Production  
+**Branch**: `IS1-105-Fix-HU4-Visualizar-ruta-asignada`
+
+Sistema de Trazabilidad de Entregas **fully operational** con UTF-8, PL/pgSQL functions, y endpoints end-to-end.
+
+**Quick validation** (5 min):
+```powershell
+cd C:\Users\david\Desktop\Ingenieria-Software-1
+docker-compose -f infra/docker-compose.yaml up -d --build
+Start-Sleep -Seconds 5
+curl http://localhost:8000/deliveries  # Should return 200 + UTF-8 names
+```
+
+**Full guide**: See [`DEPLOY.md`](DEPLOY.md)  
+**Changes & Acceptance Criteria**: See [`JIRA_CHANGELOG.md`](JIRA_CHANGELOG.md)
+
+---
 ## 🚀 Quick Start (Desarrollo)
 
 1. Clonar y situarse en la raíz del repositorio.

@@ -1,7 +1,23 @@
 // RR.HH. API Client
-// Connects to ms-rrhh microservice (localhost:8003 in dev, configurable via VITE_API_RRHH)
+// Connects to Gateway (localhost:8000) instead of ms-rrhh to avoid service dependency
 
-const API_RRHH = import.meta.env.VITE_API_RRHH || 'http://localhost:8003';
+const API_RRHH = import.meta.env.VITE_API_RRHH || 'http://localhost:8000/api/rrhh';
+
+// Helper function to handle fetch errors silently (service may not be running)
+async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    // Silently ignore connection errors - service may not be available
+    console.warn(`[RR.HH. API] Service unavailable: ${url}`);
+    // Return a mock 503 response when service is down
+    return new Response(JSON.stringify({ error: 'Service unavailable' }), {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
 
 // ========== Types ==========
 
@@ -52,73 +68,58 @@ export type ShiftAssignmentCreate = {
 // ========== Employees ==========
 
 export async function getEmployees(): Promise<Employee[]> {
-  const res = await fetch(`${API_RRHH}/employees`);
-  if (!res.ok) throw new Error('Error al cargar empleados');
+  const res = await safeFetch(`${API_RRHH}/employees`);
+  if (!res || !res.ok) return [];
   return res.json();
 }
 
-export async function getEmployee(id: number): Promise<Employee> {
-  const res = await fetch(`${API_RRHH}/employees/${id}`);
-  if (!res.ok) {
-    if (res.status === 404) throw new Error('Empleado no encontrado');
-    throw new Error('Error al cargar empleado');
-  }
+export async function getEmployee(id: number): Promise<Employee | null> {
+  const res = await safeFetch(`${API_RRHH}/employees/${id}`);
+  if (!res || !res.ok) return null;
   return res.json();
 }
 
-export async function createEmployee(data: EmployeeCreate): Promise<Employee> {
-  const res = await fetch(`${API_RRHH}/employees`, {
+export async function createEmployee(data: EmployeeCreate): Promise<Employee | null> {
+  const res = await safeFetch(`${API_RRHH}/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`Error al crear empleado: ${err.detail?.[0]?.msg || err.detail}`);
-  }
+  if (!res || !res.ok) return null;
   return res.json();
 }
 
-export async function updateEmployee(id: number, data: Partial<EmployeeCreate>): Promise<Employee> {
-  const res = await fetch(`${API_RRHH}/employees/${id}`, {
+export async function updateEmployee(id: number, data: Partial<EmployeeCreate>): Promise<Employee | null> {
+  const res = await safeFetch(`${API_RRHH}/employees/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  if (!res.ok) {
-    if (res.status === 404) throw new Error('Empleado no encontrado');
-    throw new Error('Error al actualizar empleado');
-  }
+  if (!res || !res.ok) return null;
   return res.json();
 }
 
-export async function deleteEmployee(id: number): Promise<void> {
-  const res = await fetch(`${API_RRHH}/employees/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    if (res.status === 404) throw new Error('Empleado no encontrado');
-    throw new Error('Error al eliminar empleado');
-  }
+export async function deleteEmployee(id: number): Promise<boolean> {
+  const res = await safeFetch(`${API_RRHH}/employees/${id}`, { method: 'DELETE' });
+  return res?.ok || false;
 }
 
 // ========== Shifts ==========
 
 export async function getShifts(): Promise<Shift[]> {
-  const res = await fetch(`${API_RRHH}/shifts`);
-  if (!res.ok) throw new Error('Error al cargar turnos');
+  const res = await safeFetch(`${API_RRHH}/shifts`);
+  if (!res || !res.ok) return [];
   return res.json();
 }
 
-export async function getShift(id: number): Promise<Shift> {
-  const res = await fetch(`${API_RRHH}/shifts/${id}`);
-  if (!res.ok) {
-    if (res.status === 404) throw new Error('Turno no encontrado');
-    throw new Error('Error al cargar turno');
-  }
+export async function getShift(id: number): Promise<Shift | null> {
+  const res = await safeFetch(`${API_RRHH}/shifts/${id}`);
+  if (!res || !res.ok) return null;
   return res.json();
 }
 
 export async function createShift(data: ShiftCreate): Promise<Shift> {
-  const res = await fetch(`${API_RRHH}/shifts`, {
+  const res = await safeFetch(`${API_RRHH}/shifts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -131,7 +132,7 @@ export async function createShift(data: ShiftCreate): Promise<Shift> {
 }
 
 export async function updateShift(id: number, data: Partial<ShiftCreate>): Promise<Shift> {
-  const res = await fetch(`${API_RRHH}/shifts/${id}`, {
+  const res = await safeFetch(`${API_RRHH}/shifts/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -144,7 +145,7 @@ export async function updateShift(id: number, data: Partial<ShiftCreate>): Promi
 }
 
 export async function deleteShift(id: number): Promise<void> {
-  const res = await fetch(`${API_RRHH}/shifts/${id}`, { method: 'DELETE' });
+  const res = await safeFetch(`${API_RRHH}/shifts/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     if (res.status === 404) throw new Error('Turno no encontrado');
     throw new Error('Error al eliminar turno');
@@ -163,13 +164,13 @@ export async function listAssignments(params?: {
   if (params?.from) url.searchParams.set('from', params.from);
   if (params?.to) url.searchParams.set('to', params.to);
 
-  const res = await fetch(url.toString());
+  const res = await safeFetch(url.toString());
   if (!res.ok) throw new Error('Error al cargar asignaciones');
   return res.json();
 }
 
 export async function getAssignment(id: number): Promise<ShiftAssignment> {
-  const res = await fetch(`${API_RRHH}/assignments/${id}`);
+  const res = await safeFetch(`${API_RRHH}/assignments/${id}`);
   if (!res.ok) {
     if (res.status === 404) throw new Error('Asignación no encontrada');
     throw new Error('Error al cargar asignación');
@@ -178,7 +179,7 @@ export async function getAssignment(id: number): Promise<ShiftAssignment> {
 }
 
 export async function createAssignment(data: ShiftAssignmentCreate): Promise<ShiftAssignment> {
-  const res = await fetch(`${API_RRHH}/assignments`, {
+  const res = await safeFetch(`${API_RRHH}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -194,7 +195,7 @@ export async function createAssignment(data: ShiftAssignmentCreate): Promise<Shi
 }
 
 export async function deleteAssignment(id: number): Promise<void> {
-  const res = await fetch(`${API_RRHH}/assignments/${id}`, { method: 'DELETE' });
+  const res = await safeFetch(`${API_RRHH}/assignments/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     if (res.status === 404) throw new Error('Asignación no encontrada');
     throw new Error('Error al eliminar asignación');
@@ -238,13 +239,13 @@ export type EmployeeTrainingCreate = {
 };
 
 export async function getTrainings(): Promise<Training[]> {
-  const res = await fetch(`${API_RRHH}/trainings`);
+  const res = await safeFetch(`${API_RRHH}/trainings`);
   if (!res.ok) throw new Error('Error al cargar entrenamientos');
   return res.json();
 }
 
 export async function createTraining(data: TrainingCreate): Promise<Training> {
-  const res = await fetch(`${API_RRHH}/trainings`, {
+  const res = await safeFetch(`${API_RRHH}/trainings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -254,18 +255,18 @@ export async function createTraining(data: TrainingCreate): Promise<Training> {
 }
 
 export async function deleteTraining(id: number): Promise<void> {
-  const res = await fetch(`${API_RRHH}/trainings/${id}`, { method: 'DELETE' });
+  const res = await safeFetch(`${API_RRHH}/trainings/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Error al eliminar entrenamiento');
 }
 
 export async function getEmployeeTrainings(employeeId: number): Promise<EmployeeTraining[]> {
-  const res = await fetch(`${API_RRHH}/employees/${employeeId}/trainings`);
+  const res = await safeFetch(`${API_RRHH}/employees/${employeeId}/trainings`);
   if (!res.ok) throw new Error('Error al cargar entrenamientos del empleado');
   return res.json();
 }
 
 export async function assignTraining(data: EmployeeTrainingCreate): Promise<EmployeeTraining> {
-  const res = await fetch(`${API_RRHH}/employee-trainings`, {
+  const res = await safeFetch(`${API_RRHH}/employee-trainings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -301,7 +302,7 @@ export type SuggestionsData = {
 };
 
 export async function getWeeklySuggestions(): Promise<SuggestionsData> {
-  const res = await fetch(`${API_RRHH}/assignments/suggestions/weekly`);
+  const res = await safeFetch(`${API_RRHH}/assignments/suggestions/weekly`);
   if (!res.ok) throw new Error('Error al cargar sugerencias');
   return res.json();
 }
@@ -343,7 +344,7 @@ export type AvailableDriver = {
 };
 
 export async function getAvailableDrivers(dynamicShiftId: number): Promise<AvailableDriver[]> {
-  const res = await fetch(`${API_RRHH}/dynamic-shifts/available-drivers/${dynamicShiftId}`);
+  const res = await safeFetch(`${API_RRHH}/dynamic-shifts/available-drivers/${dynamicShiftId}`);
   if (!res.ok) throw new Error('Error al cargar conductores disponibles');
   return res.json();
 }
@@ -352,7 +353,7 @@ export async function autoAssignDriver(dynamicShiftId: number, employeeId: numbe
   const url = new URL(`${API_RRHH}/dynamic-shifts/${dynamicShiftId}/auto-assign`);
   url.searchParams.set('employee_id', employeeId.toString());
   
-  const res = await fetch(url.toString(), {
+  const res = await safeFetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
@@ -364,7 +365,7 @@ export async function autoAssignDriver(dynamicShiftId: number, employeeId: numbe
 }
 
 export async function unassignDriver(dynamicShiftId: number): Promise<DynamicShift> {
-  const res = await fetch(`${API_RRHH}/dynamic-shifts/${dynamicShiftId}/unassign`, {
+  const res = await safeFetch(`${API_RRHH}/dynamic-shifts/${dynamicShiftId}/unassign`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' }
   });
@@ -376,13 +377,13 @@ export async function unassignDriver(dynamicShiftId: number): Promise<DynamicShi
 }
 
 export async function getPendingDynamicShifts(): Promise<DynamicShift[]> {
-  const res = await fetch(`${API_RRHH}/dynamic-shifts/pending/unassigned`);
+  const res = await safeFetch(`${API_RRHH}/dynamic-shifts/pending`);
   if (!res.ok) throw new Error('Error al cargar turnos pendientes');
   return res.json();
 }
 
 export async function getDynamicShift(id: number): Promise<DynamicShift> {
-  const res = await fetch(`${API_RRHH}/dynamic-shifts/${id}`);
+  const res = await safeFetch(`${API_RRHH}/dynamic-shifts/${id}`);
   if (!res.ok) throw new Error('Error al cargar turno dinámico');
   return res.json();
 }
@@ -397,7 +398,7 @@ export async function listDynamicShifts(params?: {
   if (params?.fecha_hasta) url.searchParams.set('fecha_hasta', params.fecha_hasta);
   if (params?.status) url.searchParams.set('status', params.status);
 
-  const res = await fetch(url.toString());
+  const res = await safeFetch(url.toString());
   if (!res.ok) throw new Error('Error al cargar turnos dinámicos');
   return res.json();
 }

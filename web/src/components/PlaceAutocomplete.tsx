@@ -31,48 +31,28 @@ const Input = styled.input`
   border-radius: 4px;
   box-sizing: border-box;
   font-size: 14px;
-  padding-right: 80px; /* espacio para el botón interno */
   &:focus {
     outline: none;
     border-color: #4d90fe;
   }
 `;
 
-const SearchButton = styled.button`
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: #4d90fe;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  cursor: pointer;
-  z-index: 2;
-  &:hover { background: #357ae8; }
-`;
-
-const HelperNote = styled.div`
-  color: #666;
-  font-size: 11px;
-  margin-top: 4px;
-`;
-
 const SuggestionsBox = styled.ul`
   position: absolute;
   left: 0;
   right: 0;
-  top: 44px; /* roughly below input */
+  top: 100%; /* Cambiar de 44px a 100% para que aparezca justo debajo del input */
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 4px;
+  border-top: none; /* Quitar border top para que se vea conectado */
   max-height: 220px;
   overflow-y: auto;
-  margin: 4px 0 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
-  z-index: 5;
+  z-index: 9999; /* Aumentar z-index para asegurar que esté por encima */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
 
 const SuggestionItem = styled.li`
@@ -81,6 +61,12 @@ const SuggestionItem = styled.li`
   border-bottom: 1px solid #f0f0f0;
   &:hover { background: #f7f7f7; }
   &:last-of-type { border-bottom: none; }
+`;
+
+const HelperNote = styled.div`
+  color: #666;
+  font-size: 11px;
+  margin-top: 4px;
 `;
 
 const ErrorMessage = styled.div`
@@ -94,178 +80,255 @@ const PlaceAutocomplete = React.memo(({
   googleMapsApiKey,
   placeholder = "Buscar lugar..."
 }: PlaceAutocompleteProps) => {
-  const [query, setQuery] = useState("");
+  console.log('[PlaceAutocomplete] 🚀 COMPONENTE INICIADO - Version: TIEMPO REAL SIN BOTONES v3.0');
+  const [query, setQuery] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [useGooglePlaces, setUseGooglePlaces] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesService = useRef<google.maps.places.PlacesService | null>(null);
-  const API_URL = (import.meta as any).env?.VITE_API_URL || `${location.protocol}//${location.hostname}:8000`;
-  const [hasPlacesLib, setHasPlacesLib] = useState<boolean>(false);
+  const autocomplete = useRef<google.maps.places.Autocomplete | null>(null);
+  const API_URL = (import.meta as any).env?.VITE_API_LOGISTICA || 'http://localhost:8001';
 
+  // Configurar para SIEMPRE usar backend optimizado con sugerencias visibles
   useEffect(() => {
-    if (!googleMapsApiKey) {
-      setError('API key es requerida');
+    console.log('[PlaceAutocomplete] 🔧 Forzando uso del backend optimizado para máxima compatibilidad');
+    
+    // FORZAR BACKEND SIEMPRE - ya está super optimizado con Google Places API
+    setUseGooglePlaces(false);
+    setError(null);
+    
+    console.log('[PlaceAutocomplete] ✅ Backend optimizado configurado - sugerencias visuales habilitadas');
+  }, [googleMapsApiKey, onPlaceSelect]);
+
+  // Debounce del query para búsqueda automática
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300); // Reducir a 300ms para que sea más responsivo
+
+    return () => clearTimeout(timeoutId);
+  }, [query]);
+
+  // Ejecutar búsqueda cuando cambie debouncedQuery
+  useEffect(() => {
+    console.log('[PlaceAutocomplete] 🔄 debouncedQuery useEffect triggered:', {
+      debouncedQuery,
+      length: debouncedQuery?.length,
+      useGooglePlaces,
+      shouldExecuteBackendSearch: !useGooglePlaces && debouncedQuery && debouncedQuery.length >= 2
+    });
+    
+    // Clear previous state first
+    if (!debouncedQuery || debouncedQuery.length < 2) {
+      console.log('[PlaceAutocomplete] 🚫 Clearing suggestions - query too short or empty');
+      setSuggestions([]);
+      setError(null);
       return;
     }
 
-    const initialize = () => {
-      try {
-        console.info('[PlaceAutocomplete] init — checking Places lib availability');
-        // Backend-first strategy: we no longer instantiate deprecated Google services for new customers.
-        // We only detect availability for telemetry purposes, but keep services null to avoid deprecation paths.
-        const available = Boolean(window.google?.maps?.places);
-        setHasPlacesLib(available);
-        autocompleteService.current = null;
-        placesService.current = null;
-      } catch (err) {
-        setError('Error al inicializar servicios de Google Maps');
-        console.error('Error:', err);
+    // If Google Places is enabled, it will handle suggestions automatically
+    // Only use backend search as fallback or when Google Places is not available
+    if (!useGooglePlaces) {
+      console.log('[PlaceAutocomplete] ✅ Executing backend search for:', debouncedQuery);
+      searchPlaces(debouncedQuery);
+    } else {
+      console.log('[PlaceAutocomplete] ⏭️ Skipping backend search - Google Places is handling autocomplete');
+      // Clear any previous backend suggestions since Google Places will provide them
+      setSuggestions([]);
+    }
+  }, [debouncedQuery, useGooglePlaces]);
+
+  const searchPlaces = async (searchQuery: string) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setSuggestions([]);
+      setError(null);
+      return;
+    }
+
+    console.log('[PlaceAutocomplete] 🔍 Iniciando búsqueda inteligente para:', searchQuery);
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Strategy 1: Try combined search if we have map context (could be enhanced)
+      console.log('[PlaceAutocomplete] 📡 Haciendo request a:', `${API_URL}/maps/geocode`);
+      
+      const response = await fetch(`${API_URL}/maps/geocode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: searchQuery })
+      });
+
+      console.log('[PlaceAutocomplete] 📥 Response status:', response.status, response.ok);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-    };
 
-    initialize();
-  }, [googleMapsApiKey]);
+      const data = await response.json();
+      console.log('[PlaceAutocomplete] 📦 Data recibida:', data);
+      
+      // Ensure we have an array
+      const results = Array.isArray(data) ? data : (data ? [data] : []);
+      console.log('[PlaceAutocomplete] 📋 Results array:', results, 'length:', results.length);
+      
+      const validSuggestions = results
+        .filter(item => {
+          // Support both formatted_address (Google) and display_name (Nominatim)
+          const address = item?.formatted_address || item?.display_name;
+          const hasLocation = item?.lat && item?.lng;
+          const isValid = hasLocation && address;
+          console.log('[PlaceAutocomplete] 🔍 Filtrando item:', {
+            lat: item?.lat, 
+            lng: item?.lng, 
+            address: address?.substring(0, 50) + '...', 
+            válido: isValid
+          });
+          return isValid;
+        })
+        .slice(0, 5) // Limit to 5 suggestions
+        .map(item => ({
+          label: item.formatted_address || item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lng)
+        }));
 
-  const selectSuggestion = (s: Suggestion) => {
+      console.log('[PlaceAutocomplete] ✅ Sugerencias válidas:', validSuggestions.length, validSuggestions);
+      
+      // If we have few results, try to get nearby places for better coverage
+      if (validSuggestions.length <= 2 && validSuggestions.length > 0) {
+        try {
+          console.log('[PlaceAutocomplete] 🎯 Pocas sugerencias, buscando lugares cercanos...');
+          const firstResult = validSuggestions[0];
+          
+          const nearbyResponse = await fetch(`${API_URL}/maps/nearby_search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: firstResult.lat,
+              lng: firstResult.lng,
+              radius: 3000,
+              keyword: searchQuery
+            })
+          });
+
+          if (nearbyResponse.ok) {
+            const nearbyData = await nearbyResponse.json();
+            console.log('[PlaceAutocomplete] 🏪 Nearby results:', nearbyData?.length || 0);
+            
+            if (Array.isArray(nearbyData) && nearbyData.length > 0) {
+              const nearbyPlaces = nearbyData.slice(0, 3).map(place => ({
+                label: `${place.name} - ${place.vicinity || place.formatted_address}`,
+                lat: place.lat,
+                lng: place.lng
+              }));
+              
+              // Combine results, putting nearby places first for better relevance
+              const combinedSuggestions = [...nearbyPlaces, ...validSuggestions]
+                .slice(0, 5); // Limit to 5 total
+              
+              console.log('[PlaceAutocomplete] 🔄 Combinando resultados:', combinedSuggestions.length);
+              setSuggestions(combinedSuggestions);
+            } else {
+              setSuggestions(validSuggestions);
+            }
+          } else {
+            setSuggestions(validSuggestions);
+          }
+        } catch (nearbyError) {
+          console.warn('[PlaceAutocomplete] ⚠️ Nearby search failed:', nearbyError);
+          setSuggestions(validSuggestions);
+        }
+      } else {
+        setSuggestions(validSuggestions);
+      }
+
+      // Only set error if we have NO valid suggestions
+      if (validSuggestions.length === 0) {
+        setError(`No se encontraron lugares para: ${searchQuery}`);
+      } else {
+        setError(null); // Clear any previous error
+      }
+
+    } catch (err) {
+      console.error('[PlaceAutocomplete] ❌ Error en búsqueda:', err);
+      setError(`Error al buscar lugares: ${String(err)}`);
+      setSuggestions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectSuggestion = (suggestion: Suggestion) => {
     const place: google.maps.places.PlaceResult = {
-      formatted_address: s.label,
+      formatted_address: suggestion.label,
       geometry: {
         location: {
-          lat: () => s.lat,
-          lng: () => s.lng,
+          lat: () => suggestion.lat,
+          lng: () => suggestion.lng,
         } as unknown as google.maps.LatLng,
       } as google.maps.places.PlaceGeometry,
-    } as google.maps.places.PlaceResult;
+    };
+
     onPlaceSelect(place);
-    setQuery(s.label);
+    setQuery(suggestion.label);
     setSuggestions([]);
     setError(null);
   };
 
-  const handleSearch = async () => {
-    console.info('[PlaceAutocomplete] handleSearch called. query=', query);
-    if (!query) {
-      console.warn('[PlaceAutocomplete] empty query — not searching');
-      setError('Escribe una dirección y presiona Enter');
-      return;
-    }
-
-    // helper: backend geocode fallback
-    const fallbackFetch = async (): Promise<void> => {
-      console.debug('[Autocomplete fallback] POST', `${API_URL}/maps/geocode`, 'query=', query);
-      setLoading(true);
-      const res = await fetch(`${API_URL}/maps/geocode`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: query })
-      });
-      const raw = await res.text();
-      setLoading(false);
-      if (!res.ok) throw new Error(raw || `HTTP ${res.status}`);
-      let data: any;
-      try { data = JSON.parse(raw); } catch { data = raw; }
-      const arr = Array.isArray(data) ? data : (data ? [data] : []);
-      const sugg: Suggestion[] = arr.map((it: any) => ({
-        label: it.formatted_address || it.display_name || query,
-        lat: Number(it.lat),
-        lng: Number(it.lng),
-      })).filter(s => isFinite(s.lat) && isFinite(s.lng));
-      if (sugg.length === 0) {
-        throw new Error('No se encontraron resultados');
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !useGooglePlaces) {
+      e.preventDefault();
+      if (query && query.length >= 2) {
+        searchPlaces(query);
       }
-      if (sugg.length === 1) {
-        selectSuggestion(sugg[0]);
-      } else {
-        setSuggestions(sugg);
-        setError(null);
-      }
-    };
-
-    // Backend-first: intentar primero el backend para evitar APIs deprecated de Google.
-    try {
-      await fallbackFetch();
-      return; // éxito
-    } catch (err) {
-      console.warn('[PlaceAutocomplete] backend fallback falló, intentaremos Google si está disponible…', err);
-    }
-
-    // Si quieres intentar Google como segunda opción (cuando disponible), descomenta la siguiente sección.
-    // if (!autocompleteService.current && !placesService.current) {
-    //   return; // no hay servicios de Google inicializados
-    // }
-
-    try {
-      // Google predictions deshabilitado por defecto (servicios no instanciados)
-      // Mantener esta ruta comentada hasta migrar a AutocompleteSuggestion/Place API modernas.
-      // await fallbackFetch(); // ya intentado arriba
-    } catch (err) {
-      const msg = (err as any)?.message || String(err);
-      setError(`Servicio de autocompletado no disponible: ${msg}`);
-      console.error('Búsqueda falló:', err);
     }
   };
 
-  const getPlaceDetails = (placeId: string): Promise<google.maps.places.PlaceResult> => {
-    return new Promise((resolve, reject) => {
-      if (!placesService.current) {
-        reject(new Error('Servicio de Places no inicializado'));
-        return;
-      }
-
-      placesService.current.getDetails(
-        {
-          placeId: placeId,
-          fields: ['geometry', 'formatted_address', 'name']
-        },
-        (result, status) => {
-          if (status === google.maps.places.PlacesServiceStatus.OK && result) {
-            resolve(result);
-          } else {
-            reject(status);
-          }
-        }
-      );
-    });
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    console.log('[PlaceAutocomplete] Input changed:', value, 'useGooglePlaces:', useGooglePlaces);
+    setQuery(value);
+    
+    if (error) setError(null);
+    
+    // Las sugerencias se manejan automáticamente con el useEffect de debouncedQuery
+    console.log('[PlaceAutocomplete] Query actualizado a:', value, 'Debounce se ejecutará en 300ms');
   };
 
   return (
     <div>
       <SearchContainer>
         <Input
-          id={placeholder.includes('origen') ? 'origin-input' : placeholder.includes('destino') ? 'destination-input' : 'place-input'}
-          name={placeholder.includes('origen') ? 'origin' : placeholder.includes('destino') ? 'destination' : 'place'}
           ref={inputRef}
           type="text"
-          autoComplete={placeholder.includes('origen') || placeholder.includes('destino') ? 'street-address' : 'on'}
           placeholder={placeholder}
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); if (error) setError(null); }}
-          onKeyDown={(e) => { 
-            console.debug('[PlaceAutocomplete] keyDown:', e.key);
-            if (e.key === 'Enter') { e.preventDefault(); handleSearch(); }
-          }}
+          value={query} // Siempre usar nuestro valor controlado
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
         />
-        <SearchButton type="button" onClick={handleSearch} aria-label="Buscar">
-          Buscar
-        </SearchButton>
         {suggestions.length > 0 && (
-          <SuggestionsBox role="listbox">
-            {suggestions.map((s, idx) => (
-              <SuggestionItem key={idx} role="option" onClick={() => selectSuggestion(s)}>
-                {s.label}
+          <SuggestionsBox>
+            {suggestions.map((suggestion, idx) => (
+              <SuggestionItem 
+                key={idx} 
+                onClick={() => selectSuggestion(suggestion)}
+              >
+                {suggestion.label}
               </SuggestionItem>
             ))}
           </SuggestionsBox>
         )}
       </SearchContainer>
       <HelperNote>
-        Places: {String(hasPlacesLib)} · API: {googleMapsApiKey ? 'ok' : 'missing'}
+        🚀 Búsqueda Inteligente: Autocompletado + Lugares Cercanos | 
+        API: {googleMapsApiKey ? '✓' : '✗'} | 
+        {loading && ' 🔍 Buscando...'} 
+        | Encuentra KFC, Carl's Jr, Metros y más
       </HelperNote>
-      {!hasPlacesLib && !error && (
-        <HelperNote>Sugerencias de Google no disponibles; usando búsqueda básica.</HelperNote>
-      )}
       {error && <ErrorMessage>{error}</ErrorMessage>}
     </div>
   );

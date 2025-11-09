@@ -3,6 +3,32 @@
 -- Fecha: Sprint 1
 -- ======================================
 
+-- ============================================
+-- DELIVERY_REQUESTS (debe ir antes que 002)
+-- ============================================
+CREATE TABLE IF NOT EXISTS delivery_requests (
+    id SERIAL PRIMARY KEY,
+    origin_lat NUMERIC(10,7),
+    origin_lng NUMERIC(10,7),
+    origin_address TEXT,
+    destination_lat NUMERIC(10,7),
+    destination_lng NUMERIC(10,7),
+    destination_address TEXT,
+    distance_m INTEGER,
+    duration_s INTEGER,
+    route_polyline TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    driver_id INTEGER,
+    vehicle_id INTEGER,
+    notes TEXT
+);
+
+-- ============================================
+-- INVENTARIO
+-- ============================================
+
 CREATE TABLE IF NOT EXISTS bodegas (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,

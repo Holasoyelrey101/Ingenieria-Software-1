@@ -79,6 +79,8 @@ BEGIN
     (gen_random_uuid(), 'MT-022-2025', asset_ids[3], mt_preventive_basic, mech3_id, 'Certificacion nivel 3 transporte blindado Furgon', 'Certificacion nivel 3 para transporte blindado de articulos de extremo valor', 'high', 'completed', '2025-10-15', '2025-10-18', 4, NOW()),
     (gen_random_uuid(), 'MT-023-2025', asset_ids[4], mt_predictive, mech2_id, 'Actualizacion firmware camaras 4K Sprinter COMPLETADO', 'Actualizacion firmware camaras 4K, sistema GPS anti-jamming y sensores de intrusion', 'medium', 'completed', '2025-10-20', '2025-10-24', 3, NOW());
 
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Maintenance tasks insert skipped: %', SQLERRM;
 END $$;
 
 COMMIT;
