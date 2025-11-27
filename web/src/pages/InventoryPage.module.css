@@ -1,0 +1,39 @@
+.root { padding:16px; }
+.headerBar { display:flex; gap:12px; align-items:center; }
+.badge { padding:2px 8px; border-radius:8px; font-weight:600; background:#e0e0e0; }
+.badgeAlert { background:#ffcc00; }
+.table { margin-top:12px; width:100%; border-collapse:collapse; }
+.table th { border-bottom:1px solid #ccc; text-align:left; padding:4px; }
+.table td { border-bottom:1px solid #eee; padding:4px; }
+.actions { text-align:center; }
+.empty { padding:12px; text-align:center; }
+.error { color:crimson; }
+
+/* Button styles */
+button {
+  padding: 8px 16px;
+  background-color: #2563eb;
+  color: white;
+  border: 1px solid #1d4ed8;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+select {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}

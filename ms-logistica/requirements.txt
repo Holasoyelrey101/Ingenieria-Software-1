@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+httpx
+pyotp
+python-jose[cryptography]
+sqlalchemy
+psycopg2-binary
+alembic
+structlog
+prometheus-client
+requests
+python-json-logger
+numpy>=1.24.0
+scipy>=1.10.0

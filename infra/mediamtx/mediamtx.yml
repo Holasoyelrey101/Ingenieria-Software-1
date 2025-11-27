@@ -1,0 +1,35 @@
+﻿# Configuración general
+logLevel: info
+logDestinations: [stdout]
+
+# API para monitoreo
+api: yes
+apiAddress: :9997
+
+# HLS Configuration
+hlsAddress: :8888
+hlsAlwaysRemux: yes  # CRÍTICO: Mantiene muxer activo
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsAllowOrigin: "*"
+
+# RTSP Configuration
+rtspAddress: :8554
+protocols: [tcp]
+encryption: "no"
+
+# Paths - configuración por defecto
+paths:
+  all:
+    source: publisher
+    sourceOnDemand: no
+  
+  # Paths específicos (opcional, hereda de 'all')
+  cam1:
+    source: publisher
+  
+  cam2:
+    source: publisher
